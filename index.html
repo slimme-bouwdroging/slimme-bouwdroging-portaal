@@ -401,7 +401,7 @@
       $('nkKnop').disabled = true;
       st.textContent = 'Bezig...'; st.className = '';
 
-      const { error } = await db.functions.invoke('klant-aanmaken', {
+      const { error } = await db.functions.invoke('klant-aanmakennder', {
         body: { naam, email, wachtwoord }
       });
 

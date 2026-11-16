@@ -22,6 +22,13 @@
     .hulpknop:disabled { opacity: 0.6; }
     tr.open { background: #fff0f0; }
     .banner { background: #c62828; color: #fff; padding: 12px 16px; border-radius: 8px; font-weight: bold; }
+    .beheer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    .beheer-grid .kaart { margin: 0; }
+    select { padding: 6px; margin: 6px 0 12px; max-width: 420px; width: 100%; }
+    .rij { display: flex; gap: 6px; align-items: center; max-width: 420px; }
+    .rij input { margin: 0; }
+    .klantkeuze { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .klantkeuze select { width: auto; margin: 0; }
   </style>
 </head>
 <body>
@@ -49,6 +56,39 @@
       <div id="meldingenLijst"></div>
     </div>
 
+    <!-- Alleen voor beheerder: klanten en woningen beheren -->
+    <div id="beheerBlok" class="verborgen">
+      <h2>Beheer</h2>
+      <div class="beheer-grid">
+        <div class="kaart">
+          <h3>Klant toevoegen</h3>
+          <label>Naam <input id="nkNaam" type="text"></label>
+          <label>E-mail <input id="nkEmail" type="email"></label>
+          <label>Tijdelijk wachtwoord (min. 8 tekens)</label>
+          <div class="rij">
+            <input id="nkWachtwoord" type="text" autocomplete="off">
+            <button id="nkGenereer" type="button">Genereer</button>
+          </div>
+          <p></p>
+          <button id="nkKnop">Klant aanmaken</button>
+          <p id="nkStatus"></p>
+        </div>
+        <div class="kaart">
+          <h3>Woning toevoegen</h3>
+          <label>Naam <input id="nwNaam" type="text" placeholder="Woning 003"></label>
+          <label>Adres <input id="nwAdres" type="text"></label>
+          <label>Klant <select id="nwKlant"></select></label>
+          <button id="nwKnop">Woning aanmaken</button>
+          <p id="nwStatus"></p>
+        </div>
+      </div>
+      <div class="kaart">
+        <h3>Klanten</h3>
+        <div id="klantenLijst"></div>
+      </div>
+      <h2>Woningen</h2>
+    </div>
+
     <div id="woningen"></div>
   </div>
 
@@ -60,6 +100,7 @@
 
     let rol = null;
     let kanaal = null;
+    let klanten = [];
 
     const $ = (id) => document.getElementById(id);
     const datum = (t) => new Date(t).toLocaleString('nl-BE');
@@ -87,6 +128,7 @@
       rol = null;
       $('appBlok').classList.add('verborgen');
       $('meldingenBlok').classList.add('verborgen');
+      $('beheerBlok').classList.add('verborgen');
       $('loginBlok').classList.remove('verborgen');
     }
 
@@ -103,17 +145,27 @@
 
       if (rol === 'beheerder') {
         $('meldingenBlok').classList.remove('verborgen');
+        $('beheerBlok').classList.remove('verborgen');
         await laadMeldingen();
+        await laadKlanten();
         startRealtime();
       } else {
         $('meldingenBlok').classList.add('verborgen');
+        $('beheerBlok').classList.add('verborgen');
       }
 
+      await toonWoningen();
+
+      $('loginBlok').classList.add('verborgen');
+      $('appBlok').classList.remove('verborgen');
+    }
+
+    async function toonWoningen() {
       const lijst = $('woningen');
       lijst.innerHTML = '';
 
       const { data: woningen, error } = await db.from('woningen')
-        .select('id, naam, adres').order('naam');
+        .select('id, naam, adres, klant_id').order('naam');
       if (error) { lijst.appendChild(maak('p', 'Fout: ' + error.message)); return; }
       if (woningen.length === 0) { lijst.appendChild(maak('p', 'Geen woningen gevonden.')); }
 
@@ -121,13 +173,11 @@
         const kaart = maak('div'); kaart.className = 'kaart';
         kaart.appendChild(maak('h2', w.naam));
         kaart.appendChild(maak('p', w.adres || ''));
+        if (rol === 'beheerder') kaart.appendChild(klantKeuzeVoorWoning(w));
         kaart.appendChild(await metingenTabel(w.id));
         if (rol === 'klant') kaart.appendChild(hulpBlok(w));
         lijst.appendChild(kaart);
       }
-
-      $('loginBlok').classList.add('verborgen');
-      $('appBlok').classList.remove('verborgen');
     }
 
     async function metingenTabel(woningId) {
@@ -278,6 +328,119 @@
         })
         .subscribe();
     }
+
+    // ---------- Beheerder: klanten en woningen ----------
+    async function laadKlanten() {
+      const { data, error } = await db.from('profielen')
+        .select('id, naam, email').eq('rol', 'klant').order('naam');
+      const doel = $('klantenLijst');
+      doel.innerHTML = '';
+      if (error) { doel.appendChild(maak('p', 'Fout: ' + error.message)); return; }
+      klanten = data || [];
+      vulKlantKeuze($('nwKlant'), null);
+
+      if (klanten.length === 0) { doel.appendChild(maak('p', 'Nog geen klanten.')); return; }
+      const tabel = maak('table');
+      const kop = maak('tr');
+      ['Naam', 'E-mail'].forEach(t => kop.appendChild(maak('th', t)));
+      tabel.appendChild(kop);
+      for (const k of klanten) {
+        const rij = maak('tr');
+        rij.appendChild(maak('td', k.naam || '(geen naam)'));
+        rij.appendChild(maak('td', k.email || ''));
+        tabel.appendChild(rij);
+      }
+      doel.appendChild(tabel);
+    }
+
+    function vulKlantKeuze(select, gekozen) {
+      select.innerHTML = '';
+      const leeg = maak('option', '— geen klant —'); leeg.value = '';
+      select.appendChild(leeg);
+      for (const k of klanten) {
+        const o = maak('option', (k.naam || '(geen naam)') + ' (' + (k.email || '') + ')');
+        o.value = k.id;
+        select.appendChild(o);
+      }
+      select.value = gekozen || '';
+    }
+
+    function klantKeuzeVoorWoning(w) {
+      const blok = maak('div'); blok.className = 'klantkeuze';
+      blok.appendChild(maak('span', 'Klant:'));
+      const select = maak('select');
+      vulKlantKeuze(select, w.klant_id);
+      const status = maak('span');
+      select.addEventListener('change', async () => {
+        status.textContent = 'Bezig...'; status.className = '';
+        const { error } = await db.from('woningen')
+          .update({ klant_id: select.value || null }).eq('id', w.id);
+        if (error) { status.textContent = 'Mislukt: ' + error.message; status.className = 'fout'; }
+        else { status.textContent = 'Opgeslagen ✓'; status.className = 'ok'; }
+      });
+      blok.append(select, status);
+      return blok;
+    }
+
+    function genereerWachtwoord() {
+      const tekens = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+      const r = new Uint32Array(12);
+      crypto.getRandomValues(r);
+      $('nkWachtwoord').value = Array.from(r, n => tekens[n % tekens.length]).join('');
+    }
+
+    async function klantAanmaken() {
+      const st = $('nkStatus');
+      const naam = $('nkNaam').value.trim();
+      const email = $('nkEmail').value.trim();
+      const wachtwoord = $('nkWachtwoord').value;
+      if (!naam || !email || wachtwoord.length < 8) {
+        st.textContent = 'Vul naam, e-mail en een wachtwoord van minstens 8 tekens in.';
+        st.className = 'fout'; return;
+      }
+      $('nkKnop').disabled = true;
+      st.textContent = 'Bezig...'; st.className = '';
+
+      const { error } = await db.functions.invoke('klant-aanmaken', {
+        body: { naam, email, wachtwoord }
+      });
+
+      if (error) {
+        let melding = error.message;
+        try { const b = await error.context.json(); if (b && b.fout) melding = b.fout; } catch (e) {}
+        st.textContent = 'Mislukt: ' + melding; st.className = 'fout';
+      } else {
+        st.textContent = 'Klant aangemaakt: ' + email + '. Geef de klant het tijdelijke wachtwoord door.';
+        st.className = 'ok';
+        $('nkNaam').value = ''; $('nkEmail').value = '';
+        await laadKlanten();
+        await toonWoningen();
+      }
+      $('nkKnop').disabled = false;
+    }
+
+    async function woningAanmaken() {
+      const st = $('nwStatus');
+      const naam = $('nwNaam').value.trim();
+      if (!naam) { st.textContent = 'Vul een naam in.'; st.className = 'fout'; return; }
+      $('nwKnop').disabled = true;
+      const { error } = await db.from('woningen').insert({
+        naam,
+        adres: $('nwAdres').value.trim() || null,
+        klant_id: $('nwKlant').value || null
+      });
+      if (error) { st.textContent = 'Mislukt: ' + error.message; st.className = 'fout'; }
+      else {
+        st.textContent = 'Woning aangemaakt: ' + naam; st.className = 'ok';
+        $('nwNaam').value = ''; $('nwAdres').value = ''; $('nwKlant').value = '';
+        await toonWoningen();
+      }
+      $('nwKnop').disabled = false;
+    }
+
+    $('nkGenereer').addEventListener('click', genereerWachtwoord);
+    $('nkKnop').addEventListener('click', klantAanmaken);
+    $('nwKnop').addEventListener('click', woningAanmaken);
 
     $('loginKnop').addEventListener('click', inloggen);
     $('uitlogKnop').addEventListener('click', uitloggen);

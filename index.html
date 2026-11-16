@@ -6,15 +6,22 @@
   <title>Slimme BouwDroging – klantenportaal</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 16px; color: #222; }
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; color: #222; }
     h1 { color: #1b5e7a; }
     .kaart { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 16px 0; }
-    input { display: block; width: 100%; max-width: 320px; padding: 8px; margin: 6px 0 12px; }
-    button { padding: 8px 16px; cursor: pointer; }
+    input, textarea { display: block; width: 100%; max-width: 420px; padding: 8px; margin: 6px 0 12px; box-sizing: border-box; }
+    textarea { min-height: 60px; }
+    button { padding: 8px 16px; cursor: pointer; margin-right: 6px; }
     table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-    th, td { border-bottom: 1px solid #eee; padding: 6px; text-align: left; }
+    th, td { border-bottom: 1px solid #eee; padding: 6px; text-align: left; vertical-align: top; }
     .fout { color: #b00020; }
+    .ok { color: #1b7a3a; }
     .verborgen { display: none; }
+    .hulp { border-top: 1px solid #eee; margin-top: 16px; padding-top: 12px; }
+    .hulpknop { background: #c62828; color: #fff; border: none; border-radius: 6px; font-weight: bold; }
+    .hulpknop:disabled { opacity: 0.6; }
+    tr.open { background: #fff0f0; }
+    .banner { background: #c62828; color: #fff; padding: 12px 16px; border-radius: 8px; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -33,6 +40,15 @@
   <div id="appBlok" class="verborgen">
     <p>Ingelogd als <strong id="naam"></strong> (rol: <span id="rol"></span>)
       <button id="uitlogKnop">Uitloggen</button></p>
+
+    <!-- Alleen voor beheerder (Vernast) -->
+    <div id="meldingenBlok" class="kaart verborgen">
+      <div id="nieuwBanner" class="banner verborgen">🔔 Nieuwe melding!</div>
+      <h2>Meldingen (<span id="aantalOpen">0</span> open)</h2>
+      <p id="meldingenFout" class="fout"></p>
+      <div id="meldingenLijst"></div>
+    </div>
+
     <div id="woningen"></div>
   </div>
 
@@ -42,7 +58,11 @@
     const SUPABASE_KEY = 'sb_publishable_HZgBbFIujygWgu7LCe7PSg_MPnblGz2';
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    let rol = null;
+    let kanaal = null;
+
     const $ = (id) => document.getElementById(id);
+    const datum = (t) => new Date(t).toLocaleString('nl-BE');
 
     function maak(tag, tekst) {
       const el = document.createElement(tag);
@@ -50,6 +70,7 @@
       return el;
     }
 
+    // ---------- Inloggen / uitloggen ----------
     async function inloggen() {
       $('loginFout').textContent = '';
       const { error } = await db.auth.signInWithPassword({
@@ -61,19 +82,32 @@
     }
 
     async function uitloggen() {
+      if (kanaal) { await db.removeChannel(kanaal); kanaal = null; }
       await db.auth.signOut();
+      rol = null;
       $('appBlok').classList.add('verborgen');
+      $('meldingenBlok').classList.add('verborgen');
       $('loginBlok').classList.remove('verborgen');
     }
 
+    // ---------- Hoofdscherm ----------
     async function toonApp() {
       const { data: { user } } = await db.auth.getUser();
       if (!user) return;
 
       const { data: profiel } = await db.from('profielen')
         .select('naam, rol').eq('id', user.id).single();
+      rol = profiel?.rol || 'onbekend';
       $('naam').textContent = profiel?.naam || user.email;
-      $('rol').textContent = profiel?.rol || 'onbekend';
+      $('rol').textContent = rol;
+
+      if (rol === 'beheerder') {
+        $('meldingenBlok').classList.remove('verborgen');
+        await laadMeldingen();
+        startRealtime();
+      } else {
+        $('meldingenBlok').classList.add('verborgen');
+      }
 
       const lijst = $('woningen');
       lijst.innerHTML = '';
@@ -87,36 +121,162 @@
         const kaart = maak('div'); kaart.className = 'kaart';
         kaart.appendChild(maak('h2', w.naam));
         kaart.appendChild(maak('p', w.adres || ''));
-
-        const { data: metingen } = await db.from('metingen')
-          .select('gemeten_op, temperatuur, vochtigheid, co2')
-          .eq('woning_id', w.id)
-          .order('gemeten_op', { ascending: false })
-          .limit(10);
-
-        if (!metingen || metingen.length === 0) {
-          kaart.appendChild(maak('p', 'Nog geen metingen.'));
-        } else {
-          const tabel = maak('table');
-          const kop = maak('tr');
-          ['Tijdstip', 'Temperatuur (°C)', 'Vochtigheid (%)', 'CO₂ (ppm)']
-            .forEach(t => kop.appendChild(maak('th', t)));
-          tabel.appendChild(kop);
-          for (const m of metingen) {
-            const rij = maak('tr');
-            rij.appendChild(maak('td', new Date(m.gemeten_op).toLocaleString('nl-BE')));
-            rij.appendChild(maak('td', m.temperatuur ?? '–'));
-            rij.appendChild(maak('td', m.vochtigheid ?? '–'));
-            rij.appendChild(maak('td', m.co2 ?? '–'));
-            tabel.appendChild(rij);
-          }
-          kaart.appendChild(tabel);
-        }
+        kaart.appendChild(await metingenTabel(w.id));
+        if (rol === 'klant') kaart.appendChild(hulpBlok(w));
         lijst.appendChild(kaart);
       }
 
       $('loginBlok').classList.add('verborgen');
       $('appBlok').classList.remove('verborgen');
+    }
+
+    async function metingenTabel(woningId) {
+      const { data: metingen } = await db.from('metingen')
+        .select('gemeten_op, temperatuur, vochtigheid, co2')
+        .eq('woning_id', woningId)
+        .order('gemeten_op', { ascending: false })
+        .limit(10);
+
+      if (!metingen || metingen.length === 0) return maak('p', 'Nog geen metingen.');
+
+      const tabel = maak('table');
+      const kop = maak('tr');
+      ['Tijdstip', 'Temperatuur (°C)', 'Vochtigheid (%)', 'CO₂ (ppm)']
+        .forEach(t => kop.appendChild(maak('th', t)));
+      tabel.appendChild(kop);
+      for (const m of metingen) {
+        const rij = maak('tr');
+        rij.appendChild(maak('td', datum(m.gemeten_op)));
+        rij.appendChild(maak('td', m.temperatuur ?? '–'));
+        rij.appendChild(maak('td', m.vochtigheid ?? '–'));
+        rij.appendChild(maak('td', m.co2 ?? '–'));
+        tabel.appendChild(rij);
+      }
+      return tabel;
+    }
+
+    // ---------- Klant: hulpknop ----------
+    function hulpBlok(w) {
+      const blok = maak('div'); blok.className = 'hulp';
+      blok.appendChild(maak('h3', 'Hulp nodig?'));
+
+      const tekst = maak('textarea');
+      tekst.placeholder = 'Beschrijf kort het probleem (optioneel)';
+      tekst.maxLength = 500;
+
+      const knop = maak('button', '🆘 Hulp vragen');
+      knop.className = 'hulpknop';
+
+      const status = maak('p');
+      const eigenLijst = maak('div');
+
+      knop.addEventListener('click', async () => {
+        knop.disabled = true;
+        status.textContent = 'Bezig met versturen...';
+        status.className = '';
+        const { error } = await db.from('meldingen').insert({
+          woning_id: w.id,
+          bericht: tekst.value.trim() || null
+        });
+        if (error) {
+          status.textContent = 'Versturen mislukt: ' + error.message;
+          status.className = 'fout';
+        } else {
+          status.textContent = 'Uw melding is verstuurd. Vernast neemt zo snel mogelijk contact met u op.';
+          status.className = 'ok';
+          tekst.value = '';
+          await laadEigenMeldingen(w.id, eigenLijst);
+        }
+        knop.disabled = false;
+      });
+
+      blok.append(tekst, knop, status, eigenLijst);
+      laadEigenMeldingen(w.id, eigenLijst);
+      return blok;
+    }
+
+    async function laadEigenMeldingen(woningId, doel) {
+      const { data } = await db.from('meldingen')
+        .select('bericht, status, aangemaakt_op')
+        .eq('woning_id', woningId)
+        .order('aangemaakt_op', { ascending: false })
+        .limit(5);
+      doel.innerHTML = '';
+      if (!data || data.length === 0) return;
+      doel.appendChild(maak('h4', 'Uw laatste meldingen'));
+      const ul = maak('ul');
+      for (const m of data) {
+        ul.appendChild(maak('li',
+          datum(m.aangemaakt_op) + ' – ' + m.status + (m.bericht ? ' – ' + m.bericht : '')));
+      }
+      doel.appendChild(ul);
+    }
+
+    // ---------- Beheerder: meldingenoverzicht ----------
+    async function laadMeldingen() {
+      const doel = $('meldingenLijst');
+      $('meldingenFout').textContent = '';
+
+      const { data, error } = await db.from('meldingen')
+        .select('id, bericht, status, aangemaakt_op, woningen(naam, adres), profielen(naam)')
+        .order('aangemaakt_op', { ascending: false });
+
+      doel.innerHTML = '';
+      if (error) { $('meldingenFout').textContent = 'Fout: ' + error.message; return; }
+
+      $('aantalOpen').textContent = data.filter(m => m.status !== 'opgelost').length;
+      if (data.length === 0) { doel.appendChild(maak('p', 'Nog geen meldingen.')); return; }
+
+      const tabel = maak('table');
+      const kop = maak('tr');
+      ['Tijdstip', 'Woning', 'Klant', 'Bericht', 'Status', 'Actie']
+        .forEach(t => kop.appendChild(maak('th', t)));
+      tabel.appendChild(kop);
+
+      for (const m of data) {
+        const rij = maak('tr');
+        if (m.status === 'open') rij.className = 'open';
+        rij.appendChild(maak('td', datum(m.aangemaakt_op)));
+        rij.appendChild(maak('td', (m.woningen?.naam || '?') + (m.woningen?.adres ? ' – ' + m.woningen.adres : '')));
+        rij.appendChild(maak('td', m.profielen?.naam || '?'));
+        rij.appendChild(maak('td', m.bericht || '(geen beschrijving)'));
+        rij.appendChild(maak('td', m.status));
+
+        const actie = maak('td');
+        if (m.status === 'open') {
+          const b = maak('button', 'In behandeling');
+          b.addEventListener('click', () => zetStatus(m.id, 'in behandeling'));
+          actie.appendChild(b);
+        }
+        if (m.status !== 'opgelost') {
+          const b = maak('button', 'Opgelost');
+          b.addEventListener('click', () => zetStatus(m.id, 'opgelost'));
+          actie.appendChild(b);
+        }
+        rij.appendChild(actie);
+        tabel.appendChild(rij);
+      }
+      doel.appendChild(tabel);
+    }
+
+    async function zetStatus(id, status) {
+      const { error } = await db.from('meldingen').update({ status }).eq('id', id);
+      if (error) { $('meldingenFout').textContent = 'Status wijzigen mislukt: ' + error.message; return; }
+      await laadMeldingen();
+    }
+
+    function startRealtime() {
+      if (kanaal) return;
+      kanaal = db.channel('meldingen-beheer')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'meldingen' }, (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const banner = $('nieuwBanner');
+            banner.classList.remove('verborgen');
+            setTimeout(() => banner.classList.add('verborgen'), 10000);
+          }
+          laadMeldingen();
+        })
+        .subscribe();
     }
 
     $('loginKnop').addEventListener('click', inloggen);

@@ -266,6 +266,31 @@
     .toestel.markeer { animation: markeer 1.6s ease-out; border-radius: 14px; }
     @keyframes markeer { 0% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.7); } 100% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0); } }
 
+
+    /* ---------- Hulp: foto + gesprek ---------- */
+    .hulp-rij { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .hulp-rij select { width: auto; margin: 0; }
+    .bestand { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--zacht); cursor: pointer; border: 1px dashed #3A3A37; border-radius: 999px; padding: 8px 16px; margin: 0; font-weight: 600; }
+    .bestand:hover { color: var(--tekst); border-color: var(--zacht); }
+    .bestand input { display: none; }
+    .voorbeeld { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .voorbeeld img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid var(--lijn); }
+    .voorbeeld button { padding: 5px 12px; font-size: 12px; }
+    .klikbaar-li { cursor: pointer; }
+    .klikbaar-li:hover { color: var(--tekst); }
+    .gesprek-paneel { max-width: 640px; max-height: 88vh; display: flex; flex-direction: column; }
+    .gesprek-meta { font-size: 13px; color: var(--zacht); margin: 0 0 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .gesprek-foto { max-width: 100%; max-height: 200px; border-radius: 14px; border: 1px solid var(--lijn); margin-bottom: 12px; display: block; cursor: zoom-in; }
+    .tijdlijn { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 12px; min-height: 120px; }
+    .bubbel { max-width: 82%; padding: 10px 14px; border-radius: 16px; font-size: 14px; background: #1C1C1B; border: 1px solid var(--lijn); align-self: flex-start; white-space: pre-wrap; word-break: break-word; }
+    .bubbel.eigen { align-self: flex-end; background: rgba(34, 211, 238, 0.10); border-color: rgba(34, 211, 238, 0.35); }
+    .bubbel small { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-bottom: 4px; letter-spacing: 0.04em; }
+    .tijdlijn .systeem { align-self: center; font-family: var(--mono); font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
+    .gesprek-invoer { display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--lijn); padding-top: 12px; }
+    .gesprek-invoer textarea { margin: 0; min-height: 44px; height: 44px; }
+    .gesprek-status { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .gesprek-status button { padding: 6px 14px; font-size: 12px; }
+
     @media (max-width: 600px) {
       header { padding: 14px 16px; }
       .merk span { display: none; }
@@ -318,6 +343,24 @@
       <input id="wwHerhaal" type="password" autocomplete="new-password">
       <button id="wwKnop">Wachtwoord wijzigen</button>
       <p id="wwStatus"></p>
+    </div>
+  </div>
+
+  <!-- Melding: gesprek met tijdlijn -->
+  <div id="meldingOverlay" class="overlay verborgen">
+    <div class="kaart paneel gesprek-paneel">
+      <div class="paneel-kop">
+        <h2 id="gesprekTitel">Melding</h2>
+        <button id="gesprekSluit" class="sluit" type="button">Sluiten</button>
+      </div>
+      <div id="gesprekMeta" class="gesprek-meta"></div>
+      <div id="gesprekStatus" class="gesprek-status"></div>
+      <div id="tijdlijn" class="tijdlijn"></div>
+      <div class="gesprek-invoer">
+        <textarea id="gesprekTekst" maxlength="2000" placeholder="Typ een bericht..."></textarea>
+        <button id="gesprekStuur" type="button">Versturen</button>
+      </div>
+      <p id="gesprekFout" class="fout"></p>
     </div>
   </div>
 
@@ -424,6 +467,10 @@
     let gebruikerId = null;
     let gebruikerEmail = '';
     let vlootData = [];
+    let openMeldingId = null;
+    let berichtKanaal = null;
+    const eigenVerversers = [];   // functies die de meldingenlijst van de klant verversen
+    const CATEGORIE = { geen_werking: 'Geen werking', lawaai: 'Lawaai', filter: 'Filter', app: 'App / bediening', onderhoud: 'Onderhoud', ander: 'Ander' };
     let vlootTimer = null;
     function luister(toestelId, fn) { (luisteraars[toestelId] = luisteraars[toestelId] || []).push(fn); }
 
@@ -458,6 +505,8 @@
     async function uitloggen() {
       if (kanaal) { await db.removeChannel(kanaal); kanaal = null; }
       if (statusKanaal) { await db.removeChannel(statusKanaal); statusKanaal = null; }
+      if (berichtKanaal) { await db.removeChannel(berichtKanaal); berichtKanaal = null; }
+      sluitMelding();
       if (boostTimer) { clearInterval(boostTimer); boostTimer = null; }
       for (const k of Object.keys(luisteraars)) delete luisteraars[k];
       await db.auth.signOut();
@@ -513,6 +562,8 @@
       await db.rpc('boost_afronden');
       if (!boostTimer) boostTimer = setInterval(() => db.rpc('boost_afronden'), 60000);
       startStatusRealtime();
+      eigenVerversers.length = 0;
+      startBerichtRealtime();
 
       await toonWoningen();
 
@@ -737,10 +788,11 @@
           afspraak.disabled = true;
           const { error } = await db.from('meldingen').insert({
             woning_id: w.id,
+            categorie: 'onderhoud',
             bericht: 'Onderhoudsafspraak aangevraagd voor ' + t.naam + (t.serienummer ? ' (' + t.serienummer + ')' : '')
           });
           if (error) { melding.textContent = 'Niet gelukt: ' + error.message; melding.className = 'bed-melding fout'; afspraak.disabled = false; }
-          else { melding.textContent = 'Aanvraag verstuurd. Vernast neemt contact op om een moment te plannen.'; melding.className = 'bed-melding ok'; }
+          else { melding.textContent = 'Aanvraag verstuurd. Vernast neemt contact op om een moment te plannen.'; melding.className = 'bed-melding ok'; eigenVerversers.forEach(f => f()); }
         });
         acties.appendChild(afspraak);
       }
@@ -1298,13 +1350,41 @@
       vang.addEventListener('touchend', verberg);
     }
 
-    // ---------- Klant: hulpknop ----------
+    // ---------- Klant: hulp vragen (categorie, foto, beschrijving) ----------
     function hulpBlok(w) {
       const blok = maak('div', null, 'hulp');
       blok.appendChild(maak('h3', 'Hulp nodig?'));
 
+      const rijEl = maak('div', null, 'hulp-rij');
+      const cat = maak('select');
+      for (const [k, v] of Object.entries(CATEGORIE)) { const o = maak('option', v); o.value = k; cat.appendChild(o); }
+      cat.value = 'geen_werking';
+      const fotoLabel = maak('label', null, 'bestand');
+      fotoLabel.appendChild(document.createTextNode('📷 Foto toevoegen'));
+      const fotoInput = maak('input');
+      fotoInput.type = 'file'; fotoInput.accept = 'image/*';
+      fotoLabel.appendChild(fotoInput);
+      rijEl.append(cat, fotoLabel);
+
+      const voorbeeld = maak('div', null, 'voorbeeld verborgen');
+      let fotoBlob = null;
+      fotoInput.addEventListener('change', async () => {
+        const f = fotoInput.files[0];
+        if (!f) return;
+        status.textContent = 'Foto voorbereiden...'; status.className = '';
+        try { fotoBlob = await verklein(f); }
+        catch (e) { fotoBlob = null; status.textContent = 'Deze foto kan niet gelezen worden. Kies een JPG- of PNG-foto.'; status.className = 'fout'; return; }
+        status.textContent = '';
+        voorbeeld.innerHTML = '';
+        const img = maak('img'); img.src = URL.createObjectURL(fotoBlob); img.alt = 'Voorbeeld van de foto';
+        const weg = maak('button', 'Verwijderen', 'licht'); weg.type = 'button';
+        weg.addEventListener('click', () => { fotoBlob = null; fotoInput.value = ''; voorbeeld.classList.add('verborgen'); });
+        voorbeeld.append(img, maak('span', Math.round(fotoBlob.size / 1024) + ' kB', 'adres'), weg);
+        voorbeeld.classList.remove('verborgen');
+      });
+
       const tekst = maak('textarea');
-      tekst.placeholder = 'Beschrijf kort het probleem (optioneel)';
+      tekst.placeholder = 'Beschrijf kort het probleem';
       tekst.maxLength = 500;
 
       const knop = maak('button', 'Hulp vragen', 'hulpknop');
@@ -1313,11 +1393,24 @@
 
       knop.addEventListener('click', async () => {
         knop.disabled = true;
-        status.textContent = 'Bezig met versturen...';
-        status.className = '';
+        status.textContent = 'Bezig met versturen...'; status.className = '';
+
+        let fotoPad = null;
+        if (fotoBlob) {
+          fotoPad = gebruikerId + '/' + Date.now() + '.jpg';
+          const { error: upFout } = await db.storage.from('melding-fotos')
+            .upload(fotoPad, fotoBlob, { contentType: 'image/jpeg', upsert: false });
+          if (upFout) {
+            status.textContent = 'Foto uploaden mislukt: ' + upFout.message; status.className = 'fout';
+            knop.disabled = false; return;
+          }
+        }
+
         const { error } = await db.from('meldingen').insert({
           woning_id: w.id,
-          bericht: tekst.value.trim() || null
+          categorie: cat.value,
+          bericht: tekst.value.trim() || null,
+          foto_pad: fotoPad
         });
         if (error) {
           status.textContent = 'Versturen mislukt: ' + error.message;
@@ -1325,35 +1418,180 @@
         } else {
           status.textContent = 'Uw melding is verstuurd. Vernast neemt zo snel mogelijk contact met u op.';
           status.className = 'ok';
-          tekst.value = '';
+          tekst.value = ''; fotoBlob = null; fotoInput.value = ''; voorbeeld.classList.add('verborgen');
           await laadEigenMeldingen(w.id, eigenLijst);
         }
         knop.disabled = false;
       });
 
-      blok.append(tekst, knop, status, eigenLijst);
+      blok.append(rijEl, voorbeeld, tekst, knop, status, eigenLijst);
       laadEigenMeldingen(w.id, eigenLijst);
+      eigenVerversers.push(() => laadEigenMeldingen(w.id, eigenLijst));
       return blok;
+    }
+
+    // Foto verkleinen tot max. 1600 px (sneller uploaden, kleiner dan 5 MB)
+    async function verklein(bestand) {
+      const bmp = await createImageBitmap(bestand);
+      const max = 1600;
+      const schaal = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(bmp.width * schaal); c.height = Math.round(bmp.height * schaal);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      return await new Promise((ok, nok) => c.toBlob(b => b ? ok(b) : nok(new Error('leeg')), 'image/jpeg', 0.85));
     }
 
     async function laadEigenMeldingen(woningId, doel) {
       const { data } = await db.from('meldingen')
-        .select('bericht, status, aangemaakt_op')
+        .select('id, categorie, bericht, status, aangemaakt_op, foto_pad, melding_berichten(count)')
         .eq('woning_id', woningId)
-        .order('aangemaakt_op', { ascending: false })
-        .limit(5);
+        .order('bijgewerkt_op', { ascending: false })
+        .limit(8);
       doel.innerHTML = '';
       if (!data || data.length === 0) return;
-      doel.appendChild(maak('h3', 'Uw laatste meldingen'));
+      doel.appendChild(maak('h3', 'Uw meldingen'));
       const ul = maak('ul');
       for (const m of data) {
-        const li = maak('li');
+        const li = maak('li', null, 'klikbaar-li');
+        li.title = 'Open het gesprek';
         li.appendChild(statusBadge(m.status));
         li.appendChild(maak('span', datum(m.aangemaakt_op), 'adres'));
-        if (m.bericht) li.appendChild(maak('span', m.bericht));
+        li.appendChild(maak('strong', CATEGORIE[m.categorie] || m.categorie));
+        if (m.bericht) li.appendChild(maak('span', m.bericht.length > 60 ? m.bericht.slice(0, 60) + '…' : m.bericht));
+        const n = aantalBerichten(m);
+        li.appendChild(maak('span', (m.foto_pad ? '📷 ' : '') + '💬 ' + n, 'adres'));
+        li.addEventListener('click', () => openMelding(m.id));
         ul.appendChild(li);
       }
       doel.appendChild(ul);
+    }
+
+    function aantalBerichten(m) {
+      const r = m.melding_berichten;
+      if (Array.isArray(r)) return r[0]?.count ?? 0;
+      return r?.count ?? 0;
+    }
+
+    // ---------- Gesprek per melding (klant en Vernast) ----------
+    async function openMelding(id) {
+      openMeldingId = id;
+      $('gesprekFout').textContent = '';
+      $('gesprekTekst').value = '';
+      $('meldingOverlay').classList.remove('verborgen');
+      await herlaadGesprek();
+      $('gesprekTekst').focus();
+    }
+
+    function sluitMelding() {
+      openMeldingId = null;
+      $('meldingOverlay').classList.add('verborgen');
+    }
+
+    async function herlaadGesprek() {
+      const id = openMeldingId;
+      if (!id) return;
+      const { data: m, error } = await db.from('meldingen')
+        .select('id, categorie, bericht, status, aangemaakt_op, foto_pad, klant_id, woningen(naam, adres), profielen(naam)')
+        .eq('id', id).single();
+      if (error || !m) { $('gesprekFout').textContent = 'Melding niet gevonden.'; return; }
+      if (id !== openMeldingId) return;
+
+      $('gesprekTitel').textContent = (CATEGORIE[m.categorie] || 'Melding');
+      const meta = $('gesprekMeta');
+      meta.innerHTML = '';
+      meta.appendChild(statusBadge(m.status));
+      meta.appendChild(maak('span', (m.woningen?.naam || '') + (m.woningen?.adres ? ' – ' + m.woningen.adres : '')));
+      if (rol === 'beheerder') meta.appendChild(maak('span', '· ' + (m.profielen?.naam || 'klant')));
+
+      // Statusknoppen voor Vernast
+      const st = $('gesprekStatus');
+      st.innerHTML = '';
+      if (rol === 'beheerder') {
+        for (const [waarde, tekst] of [['open', 'Open'], ['in behandeling', 'In behandeling'], ['opgelost', 'Opgelost']]) {
+          const b = maak('button', tekst, waarde === m.status ? '' : 'licht');
+          b.type = 'button';
+          b.disabled = waarde === m.status;
+          b.addEventListener('click', async () => {
+            const { error: e } = await db.from('meldingen').update({ status: waarde }).eq('id', m.id);
+            if (e) $('gesprekFout').textContent = 'Status wijzigen mislukt: ' + e.message;
+            await herlaadGesprek(); laadMeldingen(); vlootVerversen();
+          });
+          st.appendChild(b);
+        }
+      }
+
+      const { data: berichten } = await db.from('melding_berichten')
+        .select('id, afzender, soort, tekst, aangemaakt_op, profielen(naam)')
+        .eq('melding_id', id)
+        .order('aangemaakt_op');
+
+      const tl = $('tijdlijn');
+      tl.innerHTML = '';
+
+      if (m.foto_pad) {
+        const { data: url } = await db.storage.from('melding-fotos').createSignedUrl(m.foto_pad, 3600);
+        if (url?.signedUrl) {
+          const img = maak('img', null, 'gesprek-foto');
+          img.src = url.signedUrl; img.alt = 'Foto bij de melding';
+          img.addEventListener('click', () => window.open(url.signedUrl, '_blank'));
+          img.addEventListener('load', () => { tl.scrollTop = tl.scrollHeight; });
+          tl.appendChild(img);
+        }
+      }
+
+      // Eerste bericht = de oorspronkelijke melding
+      const eerste = maak('div', null, 'bubbel' + (m.klant_id === gebruikerId ? ' eigen' : ''));
+      eerste.appendChild(maak('small', (m.profielen?.naam || 'Klant') + ' · ' + datum(m.aangemaakt_op)));
+      eerste.appendChild(document.createTextNode(m.bericht || '(geen beschrijving)'));
+      tl.appendChild(eerste);
+
+      for (const b of (berichten || [])) {
+        if (b.soort === 'status') {
+          tl.appendChild(maak('div', 'Status: ' + b.tekst + ' · ' + datum(b.aangemaakt_op), 'systeem'));
+          continue;
+        }
+        const eigen = b.afzender === gebruikerId;
+        const bub = maak('div', null, 'bubbel' + (eigen ? ' eigen' : ''));
+        bub.appendChild(maak('small', (eigen ? 'U' : (b.profielen?.naam || 'Vernast')) + ' · ' + datum(b.aangemaakt_op)));
+        bub.appendChild(document.createTextNode(b.tekst));
+        tl.appendChild(bub);
+      }
+      tl.scrollTop = tl.scrollHeight;
+    }
+
+    async function stuurBericht() {
+      const tekst = $('gesprekTekst').value.trim();
+      if (!tekst || !openMeldingId) return;
+      $('gesprekStuur').disabled = true;
+      const { error } = await db.from('melding_berichten').insert({ melding_id: openMeldingId, tekst });
+      $('gesprekStuur').disabled = false;
+      if (error) { $('gesprekFout').textContent = 'Versturen mislukt: ' + error.message; return; }
+      $('gesprekFout').textContent = '';
+      $('gesprekTekst').value = '';
+      await herlaadGesprek();
+      if (rol === 'beheerder') laadMeldingen(); else eigenVerversers.forEach(f => f());
+    }
+
+    function startBerichtRealtime() {
+      if (berichtKanaal) return;
+      berichtKanaal = db.channel('melding-berichten')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'melding_berichten' }, (payload) => {
+          const b = payload.new;
+          if (b.melding_id === openMeldingId) herlaadGesprek();
+          if (b.afzender === gebruikerId) return;
+          if (rol === 'beheerder') {
+            if (b.soort === 'bericht') {
+              const banner = $('nieuwBanner');
+              banner.textContent = '💬 Nieuw bericht van een klant';
+              banner.classList.remove('verborgen');
+              setTimeout(() => { banner.classList.add('verborgen'); banner.textContent = '🔔 Nieuwe melding binnengekomen'; }, 10000);
+            }
+            laadMeldingen();
+          } else {
+            eigenVerversers.forEach(f => f());
+          }
+        })
+        .subscribe();
     }
 
     // ---------- Beheerder: meldingenoverzicht ----------
@@ -1362,8 +1600,8 @@
       $('meldingenFout').textContent = '';
 
       const { data, error } = await db.from('meldingen')
-        .select('id, bericht, status, aangemaakt_op, woningen(naam, adres), profielen(naam)')
-        .order('aangemaakt_op', { ascending: false });
+        .select('id, categorie, bericht, status, aangemaakt_op, foto_pad, woningen(naam, adres), profielen(naam), melding_berichten(count)')
+        .order('bijgewerkt_op', { ascending: false });
 
       doel.innerHTML = '';
       if (error) { $('meldingenFout').textContent = 'Fout: ' + error.message; return; }
@@ -1373,7 +1611,7 @@
 
       const tabel = maak('table');
       const kop = maak('tr');
-      ['Tijdstip', 'Woning', 'Klant', 'Bericht', 'Status', 'Actie'].forEach(t => kop.appendChild(maak('th', t)));
+      ['Tijdstip', 'Woning', 'Klant', 'Categorie', 'Bericht', 'Status', 'Actie'].forEach(t => kop.appendChild(maak('th', t)));
       tabel.appendChild(kop);
 
       for (const m of data) {
@@ -1382,10 +1620,16 @@
         rij.appendChild(maak('td', datum(m.aangemaakt_op)));
         rij.appendChild(maak('td', (m.woningen?.naam || '?') + (m.woningen?.adres ? ' – ' + m.woningen.adres : '')));
         rij.appendChild(maak('td', m.profielen?.naam || '?'));
-        rij.appendChild(maak('td', m.bericht || '(geen beschrijving)'));
+        rij.appendChild(maak('td', CATEGORIE[m.categorie] || m.categorie || '—'));
+        const ber = maak('td', m.bericht || '(geen beschrijving)');
+        ber.appendChild(maak('div', (m.foto_pad ? '📷 foto · ' : '') + '💬 ' + aantalBerichten(m) + ' berichten', 'voetnoot'));
+        rij.appendChild(ber);
         const st = maak('td'); st.appendChild(statusBadge(m.status)); rij.appendChild(st);
 
         const actie = maak('td', null, 'acties');
+        const open = maak('button', 'Openen');
+        open.addEventListener('click', () => openMelding(m.id));
+        actie.appendChild(open);
         if (m.status === 'open') {
           const b = maak('button', 'In behandeling', 'licht');
           b.addEventListener('click', () => zetStatus(m.id, 'in behandeling'));
@@ -1543,8 +1787,12 @@
     $('tijdelijkKnop').addEventListener('click', openAccount);
     $('accountSluit').addEventListener('click', sluitAccount);
     $('accountOverlay').addEventListener('click', (e) => { if (e.target === $('accountOverlay')) sluitAccount(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') sluitAccount(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { sluitAccount(); sluitMelding(); } });
     $('wwKnop').addEventListener('click', wachtwoordWijzigen);
+    $('gesprekSluit').addEventListener('click', sluitMelding);
+    $('meldingOverlay').addEventListener('click', (e) => { if (e.target === $('meldingOverlay')) sluitMelding(); });
+    $('gesprekStuur').addEventListener('click', stuurBericht);
+    $('gesprekTekst').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); stuurBericht(); } });
     $('vlootZoek').addEventListener('input', tekenVloot);
     $('vlootProbleem').addEventListener('change', tekenVloot);
 

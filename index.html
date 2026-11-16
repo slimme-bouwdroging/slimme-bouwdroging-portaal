@@ -120,13 +120,13 @@
 
     /* ---------- Live luchtkwaliteit (strook zoals op de Vernast-site) ---------- */
     .tegels {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-      gap: 1px; background: var(--lijn);
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+      background: var(--kaart-2);
       border: 1px solid var(--lijn); border-radius: 18px; overflow: hidden;
     }
-    .tegel { background: var(--kaart-2); padding: 20px 22px; }
+    .tegel { background: var(--kaart-2); padding: 18px 18px; box-shadow: 1px 0 0 var(--lijn), 0 1px 0 var(--lijn); }
     .tegel .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--dim); }
-    .tegel .waarde { font-size: 32px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; margin-top: 8px; }
+    .tegel .waarde { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; margin-top: 8px; }
     .tegel .eenheid { font-size: 14px; font-weight: 500; color: var(--zacht); margin-left: 4px; letter-spacing: 0; }
     .tegel .status { font-size: 14px; font-weight: 600; margin-top: 4px; }
     .status.goed { color: var(--accent); } .status.matig { color: var(--matig); } .status.slecht { color: var(--slecht); }
@@ -167,6 +167,39 @@
     .klantkeuze select { width: auto; min-width: 230px; margin: 0; padding: 8px 12px; font-size: 14px; }
     .acties button { padding: 6px 14px; font-size: 13px; margin: 0 6px 6px 0; }
     tr.open-rij td { background: rgba(248, 113, 113, 0.05); }
+
+
+    /* ---------- Toestellen (per kamer) ---------- */
+    .toestel { border-top: 1px solid var(--lijn); padding-top: 22px; margin-top: 22px; }
+    .toestel:first-of-type { border-top: none; padding-top: 0; margin-top: 4px; }
+    .toestel-kop { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .toestel-kop h3 { margin: 0; font-size: 19px; }
+    .toestel-kop .serie { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: 0.08em; margin-left: 8px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip { font-family: var(--mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; border-radius: 999px; padding: 3px 10px; border: 1px solid #3A3A37; color: var(--zacht); }
+    .chip.online { color: var(--teal); border-color: rgba(94, 234, 212, 0.45); background: rgba(94, 234, 212, 0.07); }
+    .chip.offline { color: var(--slecht); border-color: rgba(248, 113, 113, 0.5); background: rgba(248, 113, 113, 0.08); }
+    .chip.uit { color: var(--dim); }
+    .alarm { font-size: 14px; border-radius: 12px; padding: 10px 14px; margin: 0 0 12px; border: 1px solid; }
+    .alarm.waarschuwing, .alarm.info { color: var(--matig); border-color: rgba(245, 181, 68, 0.4); background: rgba(245, 181, 68, 0.06); }
+    .alarm.kritiek { color: var(--slecht); border-color: rgba(248, 113, 113, 0.45); background: rgba(248, 113, 113, 0.07); }
+    .voetnoot { font-size: 12px; color: var(--dim); margin: 8px 0 0; }
+
+    /* ---------- Grafieken ---------- */
+    .grafiek { margin-top: 18px; background: var(--kaart-2); border: 1px solid var(--lijn); border-radius: 18px; padding: 16px 16px 10px; }
+    .grafiek-balk { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+    .tabs button { background: transparent; color: var(--zacht); border: 1px solid transparent; padding: 6px 12px; font-size: 13px; }
+    .tabs button:hover { color: var(--tekst); background: #1A1A19; opacity: 1; }
+    .tabs button.actief { color: var(--zwart); background: var(--tekst); border-color: var(--tekst); }
+    .tabs.periode button { font-family: var(--mono); font-size: 12px; }
+    .grafiek-vak { position: relative; }
+    .grafiek svg { width: 100%; height: auto; display: block; }
+    .grafiek .as { font-family: var(--mono); font-size: 10px; fill: var(--dim); }
+    .grafiek .drempel-label { font-family: var(--mono); font-size: 10px; }
+    .tip { position: absolute; pointer-events: none; background: #1C1C1B; border: 1px solid var(--lijn); border-radius: 10px; padding: 6px 10px; font-size: 13px; white-space: nowrap; transform: translate(-50%, -110%); }
+    .tip small { display: block; color: var(--dim); font-family: var(--mono); font-size: 10.5px; }
+    .grafiek-leeg { color: var(--dim); font-size: 14px; padding: 40px 0; text-align: center; }
 
     @media (max-width: 600px) {
       header { padding: 14px 16px; }
@@ -291,16 +324,6 @@
       return maak('span', status, 'badge ' + klasse);
     }
 
-    // Indicatieve grenzen voor de kleurcode (geen norm)
-    function beoordeel(soort, waarde) {
-      if (waarde === null || waarde === undefined) return null;
-      const v = Number(waarde);
-      if (soort === 'co2') return v < 800 ? ['goed', 'Frisse lucht'] : v < 1200 ? ['matig', 'Ventileren aangeraden'] : ['slecht', 'Muffe lucht'];
-      if (soort === 'vocht') return v < 40 ? ['matig', 'Droog'] : v <= 60 ? ['goed', 'Comfortabel'] : v <= 70 ? ['matig', 'Vrij vochtig'] : ['slecht', 'Te vochtig'];
-      if (soort === 'temp') return v < 16 ? ['matig', 'Koel'] : v <= 24 ? ['goed', 'Aangenaam'] : ['matig', 'Warm'];
-      return null;
-    }
-
     // ---------- Inloggen / uitloggen ----------
     async function inloggen() {
       $('loginFout').textContent = '';
@@ -380,52 +403,118 @@
         if (rol === 'beheerder') kop.appendChild(klantKeuzeVoorWoning(w));
         kaart.appendChild(kop);
 
-        kaart.appendChild(await luchtkwaliteit(w.id));
+        const { data: toestellen } = await db.from('toestellen')
+          .select('id, naam, model, serienummer, toestel_status(*)')
+          .eq('woning_id', w.id)
+          .order('naam');
+
+        if (!toestellen || toestellen.length === 0) {
+          kaart.appendChild(maak('p', 'Nog geen toestellen geïnstalleerd.', 'adres'));
+        } else {
+          for (const t of toestellen) kaart.appendChild(await toestelBlok(t));
+        }
+
         if (rol === 'klant') kaart.appendChild(hulpBlok(w));
         lijst.appendChild(kaart);
       }
     }
 
-    // ---------- Live luchtkwaliteit + historiek ----------
-    async function luchtkwaliteit(woningId) {
-      const blok = maak('div');
-      const { data: metingen } = await db.from('metingen')
-        .select('gemeten_op, temperatuur, vochtigheid, co2')
-        .eq('woning_id', woningId)
-        .order('gemeten_op', { ascending: false })
-        .limit(10);
+    // ---------- Meetwaarden: instellingen ----------
+    const MEETWAARDEN = {
+      temperatuur: { label: 'Temperatuur', eenheid: '°C', dec: 1, drempels: [] },
+      vochtigheid: { label: 'Vochtigheid', eenheid: '%', dec: 0, drempels: [{ w: 60, k: 'matig' }, { w: 70, k: 'slecht' }] },
+      co2:         { label: 'CO₂', eenheid: 'ppm', dec: 0, drempels: [{ w: 800, k: 'matig' }, { w: 1200, k: 'slecht' }] },
+      tvoc:        { label: 'TVOC', eenheid: 'mg/m³', dec: 2, drempels: [{ w: 0.3, k: 'matig' }], extra: true },
+      pm25:        { label: 'Fijnstof', eenheid: 'µg/m³', dec: 0, drempels: [{ w: 15, k: 'matig' }, { w: 35, k: 'slecht' }], extra: true }
+    };
+    const KLEUR = { goed: '#22D3EE', matig: '#F5B544', slecht: '#F87171' };
+    const MODUS_TEKST = { automatisch: 'Automatisch', handmatig: 'Handmatig', sleep: 'Sleep Air', boost: 'Boost', afwezig: 'Afwezig' };
 
-      if (!metingen || metingen.length === 0) {
+    // Indicatieve grenzen voor de kleurcode (geen norm)
+    function beoordeel(soort, waarde) {
+      if (waarde === null || waarde === undefined) return null;
+      const v = Number(waarde);
+      if (soort === 'co2') return v < 800 ? ['goed', 'Frisse lucht'] : v < 1200 ? ['matig', 'Ventileren aangeraden'] : ['slecht', 'Muffe lucht'];
+      if (soort === 'vochtigheid') return v < 40 ? ['matig', 'Droog'] : v <= 60 ? ['goed', 'Comfortabel'] : v <= 70 ? ['matig', 'Vrij vochtig'] : ['slecht', 'Te vochtig'];
+      if (soort === 'temperatuur') return v < 16 ? ['matig', 'Koel'] : v <= 24 ? ['goed', 'Aangenaam'] : ['matig', 'Warm'];
+      if (soort === 'tvoc') return v < 0.3 ? ['goed', 'Laag'] : v < 1 ? ['matig', 'Verhoogd'] : ['slecht', 'Hoog'];
+      if (soort === 'pm25') return v < 15 ? ['goed', 'Zuiver'] : v < 35 ? ['matig', 'Matig'] : ['slecht', 'Slecht'];
+      return null;
+    }
+
+    function getal(v, dec) {
+      if (v === null || v === undefined) return '–';
+      return Number(v).toLocaleString('nl-BE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    }
+
+    function sindsTekst(t) {
+      const min = Math.round((Date.now() - new Date(t).getTime()) / 60000);
+      if (min < 2) return 'net nog';
+      if (min < 60) return min + ' min geleden';
+      const u = Math.round(min / 60);
+      if (u < 48) return u + ' uur geleden';
+      return Math.round(u / 24) + ' dagen geleden';
+    }
+
+    // ---------- Eén toestel (kamer) ----------
+    async function toestelBlok(t) {
+      const st = Array.isArray(t.toestel_status) ? t.toestel_status[0] : t.toestel_status;
+      const blok = maak('div', null, 'toestel');
+
+      // Kop: kamer + status-chips
+      const kop = maak('div', null, 'toestel-kop');
+      const naam = maak('h3', t.naam);
+      if (rol === 'beheerder' && t.serienummer) naam.appendChild(maak('span', t.serienummer, 'serie'));
+      kop.appendChild(naam);
+      const chips = maak('div', null, 'chips');
+      if (st) {
+        chips.appendChild(maak('span', st.online ? 'Online' : 'Offline · ' + sindsTekst(st.laatst_gezien), 'chip ' + (st.online ? 'online' : 'offline')));
+        if (!st.aan) chips.appendChild(maak('span', 'Uit', 'chip uit'));
+        else {
+          chips.appendChild(maak('span', MODUS_TEKST[st.modus] || st.modus, 'chip'));
+          chips.appendChild(maak('span', 'Stand ' + st.stand, 'chip'));
+        }
+      }
+      kop.appendChild(chips);
+      blok.appendChild(kop);
+
+      // Open alarmen
+      const { data: alarmen } = await db.from('alarmen')
+        .select('soort, ernst, bericht, aangemaakt_op')
+        .eq('toestel_id', t.id).is('opgelost_op', null)
+        .order('aangemaakt_op', { ascending: false });
+      for (const a of (alarmen || [])) {
+        blok.appendChild(maak('div', '⚠ ' + (a.bericht || a.soort) + ' · ' + sindsTekst(a.aangemaakt_op), 'alarm ' + a.ernst));
+      }
+
+      // Laatste meting
+      const { data: laatste } = await db.from('metingen')
+        .select('gemeten_op, temperatuur, vochtigheid, co2, tvoc, pm25')
+        .eq('toestel_id', t.id)
+        .order('gemeten_op', { ascending: false })
+        .limit(1);
+      const m = laatste && laatste[0];
+
+      if (!m) {
         blok.appendChild(maak('p', 'Nog geen metingen ontvangen.', 'adres'));
         return blok;
       }
 
-      const laatste = metingen[0];
       const tegels = maak('div', null, 'tegels');
-      tegels.appendChild(tegel('Temperatuur', laatste.temperatuur, '°C', beoordeel('temp', laatste.temperatuur)));
-      tegels.appendChild(tegel('Vochtigheid', laatste.vochtigheid, '%', beoordeel('vocht', laatste.vochtigheid)));
-      tegels.appendChild(tegel('CO₂', laatste.co2, 'ppm', beoordeel('co2', laatste.co2)));
-      blok.appendChild(tegels);
-      blok.appendChild(maak('p', 'Laatst bijgewerkt: ' + datum(laatste.gemeten_op), 'bijgewerkt'));
-
-      const det = maak('details');
-      det.appendChild(maak('summary', 'Recente metingen'));
-      const wrap = maak('div', null, 'tabel-wrap');
-      const tabel = maak('table');
-      const kop = maak('tr');
-      ['Tijdstip', 'Temperatuur', 'Vochtigheid', 'CO₂'].forEach(t => kop.appendChild(maak('th', t)));
-      tabel.appendChild(kop);
-      for (const m of metingen) {
-        const rij = maak('tr');
-        rij.appendChild(maak('td', datum(m.gemeten_op)));
-        rij.appendChild(maak('td', m.temperatuur != null ? m.temperatuur + ' °C' : '–'));
-        rij.appendChild(maak('td', m.vochtigheid != null ? m.vochtigheid + ' %' : '–'));
-        rij.appendChild(maak('td', m.co2 != null ? m.co2 + ' ppm' : '–'));
-        tabel.appendChild(rij);
+      for (const sleutel of ['co2', 'tvoc', 'pm25', 'temperatuur', 'vochtigheid']) {
+        const cfg = MEETWAARDEN[sleutel];
+        tegels.appendChild(tegel(cfg.label + (cfg.extra ? ' *' : ''), getal(m[sleutel], cfg.dec), cfg.eenheid, beoordeel(sleutel, m[sleutel])));
       }
-      wrap.appendChild(tabel);
-      det.appendChild(wrap);
-      blok.appendChild(det);
+      if (st) {
+        const weken = Math.round(st.filter_procent * 26 / 100);
+        const oordeel = st.filter_procent <= 15 ? ['slecht', 'Vervangen aangeraden']
+          : st.filter_procent <= 35 ? ['matig', 'Nog ± ' + weken + ' weken'] : ['goed', 'Nog ± ' + weken + ' weken'];
+        tegels.appendChild(tegel('Filter', st.filter_procent, '%', oordeel));
+      }
+      blok.appendChild(tegels);
+      blok.appendChild(maak('p', 'Laatst gemeten: ' + datum(m.gemeten_op) + ' · * TVOC en fijnstof vragen een extra sensor (testdata)', 'voetnoot'));
+
+      blok.appendChild(grafiekBlok(t.id));
       return blok;
     }
 
@@ -433,11 +522,157 @@
       const t = maak('div', null, 'tegel');
       t.appendChild(maak('div', label, 'label'));
       const w = maak('div', null, 'waarde');
-      w.appendChild(document.createTextNode(waarde != null ? waarde : '–'));
-      if (waarde != null) w.appendChild(maak('span', eenheid, 'eenheid'));
+      w.appendChild(document.createTextNode(waarde));
+      if (waarde !== '–') w.appendChild(maak('span', eenheid, 'eenheid'));
       t.appendChild(w);
       if (oordeel) t.appendChild(maak('div', oordeel[1], 'status ' + oordeel[0]));
       return t;
+    }
+
+    // ---------- Grafiek met keuze meetwaarde + periode ----------
+    function grafiekBlok(toestelId) {
+      const blok = maak('div', null, 'grafiek');
+      const balk = maak('div', null, 'grafiek-balk');
+      const tabsW = maak('div', null, 'tabs');
+      const tabsP = maak('div', null, 'tabs periode');
+      const vak = maak('div', null, 'grafiek-vak');
+      balk.append(tabsW, tabsP);
+      blok.append(balk, vak);
+
+      let keuze = 'co2';
+      let periode = '24u';
+      let cache = {};
+
+      async function laad() {
+        vak.innerHTML = '';
+        vak.appendChild(maak('div', 'Grafiek laden...', 'grafiek-leeg'));
+        if (!cache[periode]) {
+          const { data, error } = await db.rpc('metingen_reeks', { p_toestel: toestelId, p_periode: periode });
+          if (error) { vak.innerHTML = ''; vak.appendChild(maak('div', 'Fout: ' + error.message, 'grafiek-leeg')); return; }
+          cache[periode] = data || [];
+        }
+        tekenGrafiek(vak, cache[periode], keuze, periode);
+      }
+
+      function maakTabs(houder, opties, huidig, bijKlik) {
+        houder.innerHTML = '';
+        for (const [waarde, tekst] of opties) {
+          const b = maak('button', tekst, waarde === huidig ? 'actief' : '');
+          b.type = 'button';
+          b.addEventListener('click', () => { bijKlik(waarde); });
+          houder.appendChild(b);
+        }
+      }
+      function herteken() {
+        maakTabs(tabsW, Object.entries(MEETWAARDEN).map(([k, c]) => [k, c.label]), keuze, (k) => { keuze = k; herteken(); laad(); });
+        maakTabs(tabsP, [['24u', '24 u'], ['7d', '7 d'], ['30d', '30 d']], periode, (p) => { periode = p; herteken(); laad(); });
+      }
+      herteken();
+      laad();
+      return blok;
+    }
+
+    function tekenGrafiek(vak, punten, sleutel, periode) {
+      vak.innerHTML = '';
+      const cfg = MEETWAARDEN[sleutel];
+      const reeks = punten.filter(p => p[sleutel] !== null && p[sleutel] !== undefined)
+        .map(p => ({ t: new Date(p.tijd).getTime(), v: Number(p[sleutel]) }));
+      if (reeks.length < 2) { vak.appendChild(maak('div', 'Te weinig metingen voor een grafiek.', 'grafiek-leeg')); return; }
+
+      // Breedte volgt het scherm, zodat tekst leesbaar blijft op gsm
+      const W = Math.max(320, Math.round(vak.clientWidth || 800));
+      const H = W < 500 ? 220 : 240, L = 46, R = 14, T = 14, B = 26;
+      vak._laatst = { punten, sleutel, periode, W };
+      if (!vak._observer && window.ResizeObserver) {
+        vak._observer = new ResizeObserver(() => {
+          const l = vak._laatst;
+          if (l && vak.clientWidth && Math.abs(vak.clientWidth - l.W) > 40) tekenGrafiek(vak, l.punten, l.sleutel, l.periode);
+        });
+        vak._observer.observe(vak);
+      }
+      const tMin = reeks[0].t, tMax = reeks[reeks.length - 1].t;
+      let vMin = Math.min(...reeks.map(p => p.v)), vMax = Math.max(...reeks.map(p => p.v));
+      for (const d of cfg.drempels) { if (d.w <= vMax * 1.15) vMax = Math.max(vMax, d.w); }
+      const marge = (vMax - vMin) * 0.12 || 1;
+      vMin = Math.max(0, vMin - marge); vMax = vMax + marge;
+      const x = (t) => L + (t - tMin) / (tMax - tMin) * (W - L - R);
+      const y = (v) => T + (1 - (v - vMin) / (vMax - vMin)) * (H - T - B);
+
+      const ns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      const el = (tag, attrs, tekst) => {
+        const e = document.createElementNS(ns, tag);
+        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+        if (tekst !== undefined) e.textContent = tekst;
+        svg.appendChild(e); return e;
+      };
+
+      // verloop onder de lijn
+      const defs = document.createElementNS(ns, 'defs');
+      const id = 'verloop' + Math.random().toString(36).slice(2);
+      defs.innerHTML = `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22D3EE" stop-opacity="0.28"/><stop offset="1" stop-color="#22D3EE" stop-opacity="0"/></linearGradient>`;
+      svg.appendChild(defs);
+
+      // horizontale rasterlijnen + y-as
+      for (let i = 0; i <= 4; i++) {
+        const v = vMin + (vMax - vMin) * i / 4;
+        el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: '#1D1D1B' });
+        el('text', { x: L - 8, y: y(v) + 3, 'text-anchor': 'end', class: 'as' }, getal(v, cfg.dec > 0 ? cfg.dec : 0));
+      }
+
+      // x-as labels
+      for (let i = 0; i <= 4; i++) {
+        const t = tMin + (tMax - tMin) * i / 4;
+        const d = new Date(t);
+        const tekst = periode === '24u'
+          ? d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })
+          : d.toLocaleDateString('nl-BE', { day: '2-digit', month: '2-digit' });
+        el('text', { x: x(t), y: H - 6, 'text-anchor': i === 0 ? 'start' : i === 4 ? 'end' : 'middle', class: 'as' }, tekst);
+      }
+
+      // drempels
+      for (const d of cfg.drempels) {
+        if (d.w < vMin || d.w > vMax) continue;
+        el('line', { x1: L, x2: W - R, y1: y(d.w), y2: y(d.w), stroke: KLEUR[d.k], 'stroke-opacity': 0.55, 'stroke-dasharray': '4 4' });
+        el('text', { x: W - R - 2, y: y(d.w) - 4, 'text-anchor': 'end', class: 'drempel-label', fill: KLEUR[d.k] }, getal(d.w, cfg.dec) + ' ' + cfg.eenheid);
+      }
+
+      // lijn + vlak
+      const pad = reeks.map((p, i) => (i ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
+      el('path', { d: pad + ` L ${x(tMax).toFixed(1)} ${H - B} L ${x(tMin).toFixed(1)} ${H - B} Z`, fill: `url(#${id})` });
+      el('path', { d: pad, fill: 'none', stroke: '#22D3EE', 'stroke-width': 2, 'stroke-linejoin': 'round' });
+
+      // hover: verticale lijn + punt + tooltip
+      const hl = el('line', { y1: T, y2: H - B, stroke: '#3A3A37', visibility: 'hidden' });
+      const pt = el('circle', { r: 4, fill: '#22D3EE', stroke: '#0B0B0A', 'stroke-width': 2, visibility: 'hidden' });
+      const tip = maak('div', null, 'tip verborgen');
+      const vang = el('rect', { x: L, y: T, width: W - L - R, height: H - T - B, fill: 'transparent' });
+      vak.append(svg, tip);
+
+      function toon(evt) {
+        const r = svg.getBoundingClientRect();
+        const bron = evt.touches ? evt.touches[0] : evt;
+        const sx = (bron.clientX - r.left) / r.width * W;
+        const tWaarde = tMin + (sx - L) / (W - L - R) * (tMax - tMin);
+        let best = reeks[0];
+        for (const p of reeks) if (Math.abs(p.t - tWaarde) < Math.abs(best.t - tWaarde)) best = p;
+        const px = x(best.t), py = y(best.v);
+        hl.setAttribute('x1', px); hl.setAttribute('x2', px); hl.setAttribute('visibility', 'visible');
+        pt.setAttribute('cx', px); pt.setAttribute('cy', py); pt.setAttribute('visibility', 'visible');
+        tip.innerHTML = '';
+        tip.appendChild(document.createTextNode(getal(best.v, cfg.dec) + ' ' + cfg.eenheid));
+        tip.appendChild(maak('small', new Date(best.t).toLocaleString('nl-BE', { dateStyle: 'short', timeStyle: 'short' })));
+        tip.style.left = (px / W * r.width) + 'px';
+        tip.style.top = (py / H * r.height) + 'px';
+        tip.classList.remove('verborgen');
+      }
+      function verberg() { hl.setAttribute('visibility', 'hidden'); pt.setAttribute('visibility', 'hidden'); tip.classList.add('verborgen'); }
+      vang.addEventListener('mousemove', toon);
+      vang.addEventListener('touchstart', toon, { passive: true });
+      vang.addEventListener('touchmove', toon, { passive: true });
+      vang.addEventListener('mouseleave', verberg);
+      vang.addEventListener('touchend', verberg);
     }
 
     // ---------- Klant: hulpknop ----------

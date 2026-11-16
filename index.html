@@ -223,6 +223,24 @@
     .log ul { list-style: none; padding: 0; margin: 8px 0 0; }
     .log li { font-size: 13px; color: var(--zacht); padding: 6px 0; border-bottom: 1px solid var(--lijn-zacht); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
+
+    /* ---------- Filter & onderhoud ---------- */
+    .onderhoud { margin-top: 18px; background: var(--kaart-2); border: 1px solid var(--lijn); border-radius: 18px; padding: 16px 18px; }
+    .onderhoud-kop { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .onderhoud h4 { margin: 0; font-size: 15px; font-weight: 700; }
+    .meter { height: 8px; background: #1F1F1D; border-radius: 999px; overflow: hidden; margin: 12px 0 6px; }
+    .meter > div { height: 100%; border-radius: 999px; }
+    .meter .goed { background: var(--accent); } .meter .matig { background: var(--matig); } .meter .slecht { background: var(--slecht); }
+    .onderhoud .regel { font-size: 14px; color: var(--zacht); margin: 4px 0; }
+    .onderhoud .regel strong { color: var(--tekst); }
+    .onderhoud .regel.matig strong { color: var(--matig); }
+    .onderhoud-acties { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .onderhoud-acties button { padding: 8px 16px; font-size: 13px; }
+    button.bevestig { background: var(--accent); border-color: var(--accent); color: var(--zwart); }
+    .onderhoud-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+    .onderhoud-form select, .onderhoud-form input { width: auto; margin: 0; padding: 8px 12px; font-size: 13px; }
+    .onderhoud-form input { flex: 1; min-width: 200px; }
+
     @media (max-width: 600px) {
       header { padding: 14px 16px; }
       .merk span { display: none; }
@@ -307,6 +325,10 @@
         </div>
       </div>
       <div class="kaart" style="margin-top:20px">
+        <h3>Filters bijna op</h3>
+        <div id="filterLijst" class="tabel-wrap"></div>
+      </div>
+      <div class="kaart">
         <h3>Klanten</h3>
         <div id="klantenLijst" class="tabel-wrap"></div>
       </div>
@@ -332,7 +354,9 @@
     let klanten = [];
     let statusKanaal = null;
     let boostTimer = null;
-    const bedieningen = {};   // toestel_id -> functie die de bediening opnieuw tekent
+    const luisteraars = {};   // toestel_id -> lijst functies die bij statuswijziging opnieuw tekenen
+    let gebruikerId = null;
+    function luister(toestelId, fn) { (luisteraars[toestelId] = luisteraars[toestelId] || []).push(fn); }
 
     const $ = (id) => document.getElementById(id);
     const datum = (t) => new Date(t).toLocaleString('nl-BE', { dateStyle: 'short', timeStyle: 'short' });
@@ -366,7 +390,7 @@
       if (kanaal) { await db.removeChannel(kanaal); kanaal = null; }
       if (statusKanaal) { await db.removeChannel(statusKanaal); statusKanaal = null; }
       if (boostTimer) { clearInterval(boostTimer); boostTimer = null; }
-      for (const k of Object.keys(bedieningen)) delete bedieningen[k];
+      for (const k of Object.keys(luisteraars)) delete luisteraars[k];
       await db.auth.signOut();
       rol = null;
       $('appBlok').classList.add('verborgen');
@@ -380,6 +404,8 @@
     async function toonApp() {
       const { data: { user } } = await db.auth.getUser();
       if (!user) return;
+      gebruikerId = user.id;
+      for (const k of Object.keys(luisteraars)) delete luisteraars[k];
 
       const { data: profiel } = await db.from('profielen')
         .select('naam, rol').eq('id', user.id).single();
@@ -396,6 +422,7 @@
         $('woningenTitel').textContent = 'Alle woningen';
         await laadMeldingen();
         await laadKlanten();
+        await laadFilterLijst();
         startRealtime();
       } else {
         $('begroeting').textContent = 'Hallo ' + naam.split(' ')[0] + '.';
@@ -444,7 +471,7 @@
         if (!toestellen || toestellen.length === 0) {
           kaart.appendChild(maak('p', 'Nog geen toestellen geïnstalleerd.', 'adres'));
         } else {
-          for (const t of toestellen) kaart.appendChild(await toestelBlok(t));
+          for (const t of toestellen) kaart.appendChild(await toestelBlok(t, w));
         }
 
         if (rol === 'klant') kaart.appendChild(hulpBlok(w));
@@ -490,7 +517,7 @@
     }
 
     // ---------- Eén toestel (kamer) ----------
-    async function toestelBlok(t) {
+    async function toestelBlok(t, w) {
       const st = Array.isArray(t.toestel_status) ? t.toestel_status[0] : t.toestel_status;
       const blok = maak('div', null, 'toestel');
 
@@ -533,17 +560,209 @@
         const cfg = MEETWAARDEN[sleutel];
         tegels.appendChild(tegel(cfg.label + (cfg.extra ? ' *' : ''), getal(m[sleutel], cfg.dec), cfg.eenheid, beoordeel(sleutel, m[sleutel])));
       }
+      let filterTegel = null;
       if (st) {
-        const weken = Math.round(st.filter_procent * 26 / 100);
-        const oordeel = st.filter_procent <= 15 ? ['slecht', 'Vervangen aangeraden']
-          : st.filter_procent <= 35 ? ['matig', 'Nog ± ' + weken + ' weken'] : ['goed', 'Nog ± ' + weken + ' weken'];
-        tegels.appendChild(tegel('Filter', st.filter_procent, '%', oordeel));
+        filterTegel = tegel('Filter', st.filter_procent, '%', filterOordeel(st.filter_procent));
+        tegels.appendChild(filterTegel);
+        luister(t.id, (nieuw) => {
+          if (nieuw.filter_procent === undefined || !filterTegel) return;
+          const n = tegel('Filter', nieuw.filter_procent, '%', filterOordeel(nieuw.filter_procent));
+          filterTegel.replaceWith(n); filterTegel = n;
+        });
       }
       blok.appendChild(tegels);
       blok.appendChild(maak('p', 'Laatst gemeten: ' + datum(m.gemeten_op) + ' · * TVOC en fijnstof vragen een extra sensor (testdata)', 'voetnoot'));
 
       blok.appendChild(grafiekBlok(t.id));
+      if (st) blok.appendChild(onderhoudBlok(t, st, w));
       return blok;
+    }
+
+    // ---------- Filter: inschatting (uitgaande van ± 26 weken per filter) ----------
+    function filterOordeel(pct) {
+      const weken = Math.round(pct * 26 / 100);
+      if (pct <= 15) return ['slecht', 'Vervangen aangeraden'];
+      if (pct <= 35) return ['matig', 'Nog ± ' + weken + ' weken'];
+      return ['goed', 'Nog ± ' + weken + ' weken'];
+    }
+
+    const ONDERHOUD_TEKST = { installatie: 'Installatie', filter_vervangen: 'Filter vervangen', onderhoud: 'Onderhoud', interventie: 'Interventie' };
+
+    // ---------- Filter & onderhoud van één toestel ----------
+    function onderhoudBlok(t, st, w) {
+      const blok = maak('div', null, 'onderhoud');
+      const kop = maak('div', null, 'onderhoud-kop');
+      kop.appendChild(maak('h4', 'Filter & onderhoud'));
+      blok.appendChild(kop);
+
+      const meter = maak('div', null, 'meter');
+      const balk = maak('div');
+      meter.appendChild(balk);
+      const filterRegel = maak('p', null, 'regel');
+      const onderhoudRegel = maak('p', null, 'regel');
+      const melding = maak('p', null, 'bed-melding');
+      const acties = maak('div', null, 'onderhoud-acties');
+      const historiek = maak('details', null, 'log');
+      const histLijst = maak('div');
+      historiek.appendChild(maak('summary', 'Onderhoudshistoriek'));
+      historiek.appendChild(histLijst);
+      blok.append(meter, filterRegel, onderhoudRegel, acties);
+
+      let pct = st.filter_procent;
+      let online = st.online;
+
+      function tekenFilter() {
+        const o = filterOordeel(pct);
+        balk.className = o[0];
+        balk.style.width = Math.max(2, pct) + '%';
+        filterRegel.innerHTML = '';
+        filterRegel.appendChild(document.createTextNode('Filter: '));
+        filterRegel.appendChild(maak('strong', pct + ' %'));
+        filterRegel.appendChild(document.createTextNode(' · ' + o[1]));
+        filterKnop.disabled = !online;
+      }
+
+      // Filter vervangen: twee keer klikken (geen pop-up)
+      const filterKnop = maak('button', 'Filter vervangen ✓', 'licht');
+      let bevestigTimer = null;
+      filterKnop.addEventListener('click', async () => {
+        if (!filterKnop.classList.contains('bevestig')) {
+          filterKnop.classList.add('bevestig');
+          filterKnop.textContent = 'Klik opnieuw om te bevestigen';
+          bevestigTimer = setTimeout(() => { filterKnop.classList.remove('bevestig'); filterKnop.textContent = 'Filter vervangen ✓'; }, 5000);
+          return;
+        }
+        clearTimeout(bevestigTimer);
+        filterKnop.classList.remove('bevestig');
+        filterKnop.textContent = 'Filter vervangen ✓';
+        filterKnop.disabled = true;
+        melding.textContent = 'Bezig...'; melding.className = 'bed-melding';
+        const { data, error } = await db.from('commandos')
+          .insert({ toestel_id: t.id, actie: 'filter_reset' })
+          .select('status, foutmelding').single();
+        if (error) { melding.textContent = 'Niet gelukt: ' + error.message; melding.className = 'bed-melding fout'; }
+        else if (data.status === 'mislukt') { melding.textContent = 'Niet uitgevoerd: ' + (data.foutmelding || ''); melding.className = 'bed-melding fout'; }
+        else { melding.textContent = 'Filterteller staat terug op 100 % ✓'; melding.className = 'bed-melding ok'; }
+        const { data: nieuw } = await db.from('toestel_status').select('filter_procent, online').eq('toestel_id', t.id).single();
+        if (nieuw) { pct = nieuw.filter_procent; online = nieuw.online; }
+        tekenFilter();
+        for (const fn of (luisteraars[t.id] || [])) fn({ filter_procent: pct });
+        await laadHistoriek();
+        if (rol === 'beheerder') laadFilterLijst();
+      });
+      acties.appendChild(filterKnop);
+
+      // Klant: onderhoudsafspraak aanvragen (komt als melding binnen bij Vernast)
+      if (rol === 'klant') {
+        const afspraak = maak('button', 'Onderhoudsafspraak aanvragen', 'licht');
+        afspraak.addEventListener('click', async () => {
+          afspraak.disabled = true;
+          const { error } = await db.from('meldingen').insert({
+            woning_id: w.id,
+            bericht: 'Onderhoudsafspraak aangevraagd voor ' + t.naam + (t.serienummer ? ' (' + t.serienummer + ')' : '')
+          });
+          if (error) { melding.textContent = 'Niet gelukt: ' + error.message; melding.className = 'bed-melding fout'; afspraak.disabled = false; }
+          else { melding.textContent = 'Aanvraag verstuurd. Vernast neemt contact op om een moment te plannen.'; melding.className = 'bed-melding ok'; }
+        });
+        acties.appendChild(afspraak);
+      }
+
+      blok.appendChild(melding);
+
+      // Beheerder: onderhoud of interventie registreren
+      if (rol === 'beheerder') {
+        const form = maak('div', null, 'onderhoud-form');
+        const soort = maak('select');
+        for (const [k, v] of [['onderhoud', 'Onderhoud'], ['interventie', 'Interventie']]) { const o = maak('option', v); o.value = k; soort.appendChild(o); }
+        const omschr = maak('input'); omschr.placeholder = 'Omschrijving (bv. ventilator gereinigd)';
+        const knop = maak('button', 'Registreren');
+        knop.addEventListener('click', async () => {
+          if (!omschr.value.trim()) { melding.textContent = 'Vul een omschrijving in.'; melding.className = 'bed-melding fout'; return; }
+          knop.disabled = true;
+          const { error } = await db.from('onderhoud').insert({ toestel_id: t.id, soort: soort.value, omschrijving: omschr.value.trim(), door: gebruikerId });
+          if (error) { melding.textContent = 'Niet gelukt: ' + error.message; melding.className = 'bed-melding fout'; }
+          else { melding.textContent = 'Geregistreerd ✓'; melding.className = 'bed-melding ok'; omschr.value = ''; await laadHistoriek(); historiek.open = true; }
+          knop.disabled = false;
+        });
+        form.append(soort, omschr, knop);
+        blok.appendChild(form);
+      }
+
+      blok.appendChild(historiek);
+
+      async function laadHistoriek() {
+        const { data } = await db.from('onderhoud')
+          .select('soort, omschrijving, uitgevoerd_op')
+          .eq('toestel_id', t.id)
+          .order('uitgevoerd_op', { ascending: false });
+        const lijst = data || [];
+
+        // Volgend onderhoud: 1 jaar na laatste installatie of onderhoud
+        const basis = lijst.find(o => o.soort === 'onderhoud' || o.soort === 'installatie');
+        onderhoudRegel.innerHTML = '';
+        onderhoudRegel.className = 'regel';
+        if (basis) {
+          const volgend = new Date(basis.uitgevoerd_op);
+          volgend.setFullYear(volgend.getFullYear() + 1);
+          const dagen = Math.round((volgend - Date.now()) / 86400000);
+          onderhoudRegel.appendChild(document.createTextNode('Volgend onderhoud: '));
+          onderhoudRegel.appendChild(maak('strong', volgend.toLocaleDateString('nl-BE', { day: 'numeric', month: 'long', year: 'numeric' })));
+          onderhoudRegel.appendChild(document.createTextNode(dagen < 0 ? ' · te laat' : ' · over ' + dagen + ' dagen'));
+          if (dagen <= 30) onderhoudRegel.classList.add('matig');
+        }
+
+        histLijst.innerHTML = '';
+        if (lijst.length === 0) { histLijst.appendChild(maak('p', 'Nog geen onderhoud geregistreerd.', 'adres')); return; }
+        const ul = maak('ul');
+        for (const o of lijst) {
+          const li = maak('li');
+          li.appendChild(maak('span', new Date(o.uitgevoerd_op).toLocaleDateString('nl-BE')));
+          li.appendChild(maak('strong', ONDERHOUD_TEKST[o.soort] || o.soort));
+          if (o.omschrijving) li.appendChild(maak('span', o.omschrijving));
+          ul.appendChild(li);
+        }
+        histLijst.appendChild(ul);
+      }
+
+      luister(t.id, (nieuw) => {
+        if (nieuw.filter_procent !== undefined && nieuw.filter_procent !== pct) { pct = nieuw.filter_procent; tekenFilter(); laadHistoriek(); }
+        if (nieuw.online !== undefined) { online = nieuw.online; tekenFilter(); }
+      });
+
+      tekenFilter();
+      laadHistoriek();
+      return blok;
+    }
+
+    // ---------- Beheerder: filters bijna op ----------
+    async function laadFilterLijst() {
+      const doel = $('filterLijst');
+      if (!doel) return;
+      const { data, error } = await db.from('toestel_status')
+        .select('filter_procent, online, toestellen(naam, serienummer, woningen(naam, profielen(naam)))')
+        .lte('filter_procent', 35)
+        .order('filter_procent');
+      doel.innerHTML = '';
+      if (error) { doel.appendChild(maak('p', 'Fout: ' + error.message, 'fout')); return; }
+      if (!data || data.length === 0) { doel.appendChild(maak('p', 'Alle filters zijn in orde.', 'adres')); return; }
+      const tabel = maak('table');
+      const kop = maak('tr');
+      ['Filter', 'Klant', 'Woning', 'Kamer', 'Serienummer'].forEach(x => kop.appendChild(maak('th', x)));
+      tabel.appendChild(kop);
+      for (const r of data) {
+        const t = r.toestellen || {};
+        const rij = maak('tr');
+        const c = maak('td');
+        const o = filterOordeel(r.filter_procent);
+        c.appendChild(maak('span', r.filter_procent + ' %', 'badge ' + (o[0] === 'slecht' ? 'open' : 'behandeling')));
+        rij.appendChild(c);
+        rij.appendChild(maak('td', t.woningen?.profielen?.naam || '—'));
+        rij.appendChild(maak('td', t.woningen?.naam || '?'));
+        rij.appendChild(maak('td', t.naam || '?'));
+        rij.appendChild(maak('td', t.serienummer || ''));
+        tabel.appendChild(rij);
+      }
+      doel.appendChild(tabel);
     }
 
     function vulChips(chips, st) {
@@ -560,8 +779,7 @@
       if (statusKanaal) return;
       statusKanaal = db.channel('toestel-status')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'toestel_status' }, (payload) => {
-          const teken = bedieningen[payload.new.toestel_id];
-          if (teken) teken(payload.new);
+          for (const fn of (luisteraars[payload.new.toestel_id] || [])) fn(payload.new);
         })
         .subscribe();
     }
@@ -698,7 +916,7 @@
         logLijst.appendChild(ul);
       }
 
-      bedieningen[t.id] = (nieuw) => { if (!bezig) teken({ ...huidig, ...nieuw }); };
+      luister(t.id, (nieuw) => { if (!bezig) teken({ ...huidig, ...nieuw }); });
       teken(st);
       return blok;
     }

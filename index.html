@@ -201,6 +201,28 @@
     .tip small { display: block; color: var(--dim); font-family: var(--mono); font-size: 10.5px; }
     .grafiek-leeg { color: var(--dim); font-size: 14px; padding: 40px 0; text-align: center; }
 
+
+    /* ---------- Bediening ---------- */
+    .bediening { background: var(--kaart-2); border: 1px solid var(--lijn); border-radius: 18px; padding: 16px 18px; margin-bottom: 14px; }
+    .bed-rij { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 8px 0; }
+    .bed-rij + .bed-rij { border-top: 1px solid var(--lijn-zacht); }
+    .bed-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dim); min-width: 70px; }
+    .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; border: 1px solid var(--lijn); border-radius: 22px; padding: 3px; background: var(--kaart); }
+    .seg button { background: transparent; border: none; color: var(--zacht); padding: 7px 14px; font-size: 13px; }
+    .seg button:hover:not(:disabled) { color: var(--tekst); background: #1F1F1D; opacity: 1; }
+    .seg button.actief { background: var(--tekst); color: var(--zwart); }
+    .seg button.actief.boost { background: var(--accent); }
+    .seg.stand button { min-width: 38px; padding: 7px 0; font-family: var(--mono); }
+    .bed-rij select { width: auto; margin: 0; padding: 7px 12px; font-size: 13px; border-radius: 999px; }
+    .bed-rij > button { padding: 8px 16px; font-size: 13px; }
+    .bed-info { font-size: 13px; color: var(--accent); }
+    .bed-melding { font-size: 13px; margin: 8px 0 0; min-height: 1em; color: var(--zacht); }
+    .bed-melding.ok { color: var(--accent); } .bed-melding.fout { color: var(--slecht); }
+    .bed-offline { font-size: 13px; color: var(--slecht); margin: 0 0 6px; }
+    .log { margin-top: 6px; }
+    .log ul { list-style: none; padding: 0; margin: 8px 0 0; }
+    .log li { font-size: 13px; color: var(--zacht); padding: 6px 0; border-bottom: 1px solid var(--lijn-zacht); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
     @media (max-width: 600px) {
       header { padding: 14px 16px; }
       .merk span { display: none; }
@@ -308,6 +330,9 @@
     let rol = null;
     let kanaal = null;
     let klanten = [];
+    let statusKanaal = null;
+    let boostTimer = null;
+    const bedieningen = {};   // toestel_id -> functie die de bediening opnieuw tekent
 
     const $ = (id) => document.getElementById(id);
     const datum = (t) => new Date(t).toLocaleString('nl-BE', { dateStyle: 'short', timeStyle: 'short' });
@@ -339,6 +364,9 @@
 
     async function uitloggen() {
       if (kanaal) { await db.removeChannel(kanaal); kanaal = null; }
+      if (statusKanaal) { await db.removeChannel(statusKanaal); statusKanaal = null; }
+      if (boostTimer) { clearInterval(boostTimer); boostTimer = null; }
+      for (const k of Object.keys(bedieningen)) delete bedieningen[k];
       await db.auth.signOut();
       rol = null;
       $('appBlok').classList.add('verborgen');
@@ -376,6 +404,11 @@
         $('beheerBlok').classList.add('verborgen');
         $('woningenTitel').textContent = 'Uw woning';
       }
+
+      // Verlopen boosts afronden (een echt toestel doet dit zelf; nu de simulator)
+      await db.rpc('boost_afronden');
+      if (!boostTimer) boostTimer = setInterval(() => db.rpc('boost_afronden'), 60000);
+      startStatusRealtime();
 
       await toonWoningen();
 
@@ -467,16 +500,11 @@
       if (rol === 'beheerder' && t.serienummer) naam.appendChild(maak('span', t.serienummer, 'serie'));
       kop.appendChild(naam);
       const chips = maak('div', null, 'chips');
-      if (st) {
-        chips.appendChild(maak('span', st.online ? 'Online' : 'Offline · ' + sindsTekst(st.laatst_gezien), 'chip ' + (st.online ? 'online' : 'offline')));
-        if (!st.aan) chips.appendChild(maak('span', 'Uit', 'chip uit'));
-        else {
-          chips.appendChild(maak('span', MODUS_TEKST[st.modus] || st.modus, 'chip'));
-          chips.appendChild(maak('span', 'Stand ' + st.stand, 'chip'));
-        }
-      }
+      if (st) vulChips(chips, st);
       kop.appendChild(chips);
       blok.appendChild(kop);
+
+      if (st) blok.appendChild(bedieningBlok(t, st, chips));
 
       // Open alarmen
       const { data: alarmen } = await db.from('alarmen')
@@ -515,6 +543,163 @@
       blok.appendChild(maak('p', 'Laatst gemeten: ' + datum(m.gemeten_op) + ' · * TVOC en fijnstof vragen een extra sensor (testdata)', 'voetnoot'));
 
       blok.appendChild(grafiekBlok(t.id));
+      return blok;
+    }
+
+    function vulChips(chips, st) {
+      chips.innerHTML = '';
+      chips.appendChild(maak('span', st.online ? 'Online' : 'Offline · ' + sindsTekst(st.laatst_gezien), 'chip ' + (st.online ? 'online' : 'offline')));
+      if (!st.aan) chips.appendChild(maak('span', 'Uit', 'chip uit'));
+      else {
+        chips.appendChild(maak('span', MODUS_TEKST[st.modus] || st.modus, 'chip'));
+        chips.appendChild(maak('span', 'Stand ' + st.stand, 'chip'));
+      }
+    }
+
+    function startStatusRealtime() {
+      if (statusKanaal) return;
+      statusKanaal = db.channel('toestel-status')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'toestel_status' }, (payload) => {
+          const teken = bedieningen[payload.new.toestel_id];
+          if (teken) teken(payload.new);
+        })
+        .subscribe();
+    }
+
+    const ACTIE_TEKST = {
+      aan: () => 'Aangezet', uit: () => 'Uitgezet',
+      stand: (w) => 'Stand ' + w, modus: (w) => 'Modus ' + (MODUS_TEKST[w] || w),
+      boost: (w) => 'Boost ' + (w || 30) + ' min', filter_reset: () => 'Filter vervangen'
+    };
+
+    // ---------- Bediening van één toestel ----------
+    function bedieningBlok(t, st, chips) {
+      const blok = maak('div', null, 'bediening');
+      const inhoud = maak('div');
+      const melding = maak('p', null, 'bed-melding');
+      const log = maak('details', null, 'log');
+      const logLijst = maak('div');
+      log.appendChild(maak('summary', 'Laatste acties'));
+      log.appendChild(logLijst);
+      log.addEventListener('toggle', () => { if (log.open) laadLog(); });
+      blok.append(inhoud, melding, log);
+
+      let huidig = st;
+      let bezig = false;
+
+      async function stuur(actie, waarde) {
+        if (bezig) return;
+        bezig = true; teken(huidig);
+        melding.textContent = 'Bezig met versturen...'; melding.className = 'bed-melding';
+
+        const { data, error } = await db.from('commandos')
+          .insert({ toestel_id: t.id, actie, waarde: waarde ?? null })
+          .select('status, foutmelding')
+          .single();
+
+        if (error) {
+          melding.textContent = 'Niet gelukt: ' + error.message; melding.className = 'bed-melding fout';
+        } else if (data.status === 'mislukt') {
+          melding.textContent = 'Niet uitgevoerd: ' + (data.foutmelding || 'onbekende fout'); melding.className = 'bed-melding fout';
+        } else if (data.status === 'wachtend') {
+          melding.textContent = 'Verstuurd — wacht op bevestiging van het toestel...'; melding.className = 'bed-melding';
+        } else {
+          melding.textContent = 'Uitgevoerd ✓ (' + ACTIE_TEKST[actie](waarde) + ')'; melding.className = 'bed-melding ok';
+        }
+
+        // Toestand opnieuw ophalen: we tonen wat het toestel bevestigt, niet wat we vroegen
+        const { data: nieuw } = await db.from('toestel_status').select('*').eq('toestel_id', t.id).single();
+        bezig = false;
+        teken(nieuw || huidig);
+        if (log.open) laadLog();
+      }
+
+      function segment(opties, actief, bijKlik, extraKlasse) {
+        const seg = maak('div', null, 'seg' + (extraKlasse ? ' ' + extraKlasse : ''));
+        for (const [waarde, tekst] of opties) {
+          const b = maak('button', tekst, waarde === actief ? 'actief' : '');
+          b.type = 'button';
+          b.disabled = bezig || !huidig.online;
+          b.addEventListener('click', () => { if (waarde !== actief) bijKlik(waarde); });
+          seg.appendChild(b);
+        }
+        return seg;
+      }
+
+      function rij(label, ...inhoudDelen) {
+        const r = maak('div', null, 'bed-rij');
+        r.appendChild(maak('span', label, 'bed-label'));
+        for (const d of inhoudDelen) r.appendChild(d);
+        return r;
+      }
+
+      function teken(s) {
+        huidig = s;
+        vulChips(chips, s);
+        inhoud.innerHTML = '';
+
+        if (!s.online) inhoud.appendChild(maak('p', 'Toestel is offline — bediening niet mogelijk tot het weer verbinding heeft.', 'bed-offline'));
+
+        // Aan / uit
+        inhoud.appendChild(rij('Toestel',
+          segment([['aan', 'Aan'], ['uit', 'Uit']], s.aan ? 'aan' : 'uit', (w) => stuur(w))));
+
+        if (s.aan) {
+          // Modus
+          const modusSeg = segment(
+            [['automatisch', 'Automatisch'], ['handmatig', 'Handmatig'], ['sleep', 'Sleep Air'], ['afwezig', 'Afwezig']],
+            s.modus, (w) => stuur('modus', w));
+          inhoud.appendChild(rij('Modus', modusSeg));
+
+          // Stand
+          const standSeg = segment([1, 2, 3, 4, 5].map(n => [n, String(n)]), s.stand, (n) => stuur('stand', String(n)), 'stand');
+          const standRij = rij('Stand', standSeg);
+          if (s.modus === 'automatisch') standRij.appendChild(maak('span', 'Automatisch geregeld — kies een stand om over te nemen', 'adres'));
+          inhoud.appendChild(standRij);
+
+          // Boost
+          if (s.modus === 'boost' && s.boost_tot) {
+            const tot = new Date(s.boost_tot).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+            const stop = maak('button', 'Boost stoppen', 'licht');
+            stop.disabled = bezig || !s.online;
+            stop.addEventListener('click', () => stuur('modus', s.voor_boost_modus && s.voor_boost_modus !== 'boost' ? s.voor_boost_modus : 'automatisch'));
+            inhoud.appendChild(rij('Boost', maak('span', 'Actief op maximum tot ' + tot, 'bed-info'), stop));
+          } else {
+            const duur = maak('select');
+            for (const m of [15, 30, 60]) { const o = maak('option', m + ' min'); o.value = m; duur.appendChild(o); }
+            duur.value = '30';
+            duur.disabled = bezig || !s.online;
+            const start = maak('button', 'Boost starten', 'licht');
+            start.disabled = bezig || !s.online;
+            start.addEventListener('click', () => stuur('boost', duur.value));
+            inhoud.appendChild(rij('Boost', duur, start));
+          }
+        }
+      }
+
+      async function laadLog() {
+        const { data } = await db.from('commandos')
+          .select('actie, waarde, status, foutmelding, aangemaakt_op, profielen(naam)')
+          .eq('toestel_id', t.id)
+          .order('aangemaakt_op', { ascending: false })
+          .limit(8);
+        logLijst.innerHTML = '';
+        if (!data || data.length === 0) { logLijst.appendChild(maak('p', 'Nog geen acties.', 'adres')); return; }
+        const ul = maak('ul');
+        for (const c of data) {
+          const li = maak('li');
+          li.appendChild(maak('span', c.status === 'uitgevoerd' ? 'OK' : c.status, 'badge ' + (c.status === 'uitgevoerd' ? 'opgelost' : c.status === 'mislukt' ? 'open' : 'behandeling')));
+          li.appendChild(maak('span', datum(c.aangemaakt_op)));
+          li.appendChild(maak('strong', (ACTIE_TEKST[c.actie] || (() => c.actie))(c.waarde)));
+          li.appendChild(maak('span', 'door ' + (c.profielen?.naam || 'Vernast')));
+          if (c.foutmelding) li.appendChild(maak('span', c.foutmelding, 'fout'));
+          ul.appendChild(li);
+        }
+        logLijst.appendChild(ul);
+      }
+
+      bedieningen[t.id] = (nieuw) => { if (!bezig) teken({ ...huidig, ...nieuw }); };
+      teken(st);
       return blok;
     }
 

@@ -3,71 +3,237 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Slimme BouwDroging – klantenportaal</title>
+  <meta name="theme-color" content="#0B0B0A">
+  <title>Fresh Air One – Klantenportaal</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; color: #222; }
-    h1 { color: #1b5e7a; }
-    .kaart { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 16px 0; }
-    input, textarea { display: block; width: 100%; max-width: 420px; padding: 8px; margin: 6px 0 12px; box-sizing: border-box; }
-    textarea { min-height: 60px; }
-    button { padding: 8px 16px; cursor: pointer; margin-right: 6px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-    th, td { border-bottom: 1px solid #eee; padding: 6px; text-align: left; vertical-align: top; }
-    .fout { color: #b00020; }
-    .ok { color: #1b7a3a; }
-    .verborgen { display: none; }
-    .hulp { border-top: 1px solid #eee; margin-top: 16px; padding-top: 12px; }
-    .hulpknop { background: #c62828; color: #fff; border: none; border-radius: 6px; font-weight: bold; }
-    .hulpknop:disabled { opacity: 0.6; }
-    tr.open { background: #fff0f0; }
-    .banner { background: #c62828; color: #fff; padding: 12px 16px; border-radius: 8px; font-weight: bold; }
-    .beheer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    :root {
+      --zwart: #0B0B0A;
+      --kaart: #121211;
+      --kaart-2: #0E0E0D;
+      --lijn: #262624;
+      --lijn-zacht: #1D1D1B;
+      --tekst: #F4F4F1;
+      --zacht: #A3A29D;
+      --dim: #75746F;
+      --accent: #22D3EE;
+      --accent-zacht: rgba(34, 211, 238, 0.10);
+      --teal: #5EEAD4;
+      --matig: #F5B544;
+      --slecht: #F87171;
+      --rood: #E5484D;
+      --radius: 22px;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--zwart); }
+    body {
+      margin: 0;
+      font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(1100px 520px at 25% -8%, rgba(34, 211, 238, 0.12), transparent 62%),
+        var(--zwart);
+      background-attachment: fixed;
+      color: var(--tekst);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    /* ---------- Kopbalk ---------- */
+    header {
+      background: rgba(11, 11, 10, 0.82);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--lijn-zacht);
+      padding: 16px 28px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .merk { display: flex; align-items: baseline; gap: 12px; }
+    .merk strong { font-size: 19px; letter-spacing: -0.02em; font-weight: 700; color: var(--tekst); }
+    .merk span { font-family: var(--mono); font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.16em; }
+    .gebruiker { display: flex; align-items: center; gap: 14px; font-size: 14px; color: var(--zacht); }
+    .gebruiker .rolbadge {
+      font-family: var(--mono); border: 1px solid rgba(94, 234, 212, 0.45); background: rgba(94, 234, 212, 0.07);
+      border-radius: 999px; padding: 3px 10px; font-size: 10.5px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.14em; color: var(--teal);
+    }
+
+    main { max-width: 1080px; margin: 0 auto; padding: 56px 22px 80px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent); margin: 0 0 14px; }
+    h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 800; letter-spacing: -0.045em; line-height: 1.04; margin: 0 0 14px; }
+    h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.025em; margin: 0 0 4px; }
+    h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 14px; }
+    .ondertitel { color: var(--zacht); font-size: 17px; margin: 0 0 36px; max-width: 620px; }
+    .sectietitel { font-family: var(--mono); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent); margin: 44px 0 14px; }
+
+    /* ---------- Kaarten ---------- */
+    .kaart {
+      background: var(--kaart);
+      border: 1px solid var(--lijn);
+      border-radius: var(--radius);
+      padding: 26px;
+      margin: 0 0 20px;
+    }
+    .kaart-kop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+    .adres { color: var(--zacht); font-size: 14px; margin: 0; }
+
+    /* ---------- Formulieren ---------- */
+    label { display: block; font-size: 13px; font-weight: 600; color: var(--zacht); margin-bottom: 6px; }
+    input, textarea, select {
+      display: block; width: 100%;
+      font: inherit; font-size: 15px;
+      padding: 12px 14px; margin: 0 0 16px;
+      border: 1px solid var(--lijn); border-radius: 14px;
+      background: var(--kaart-2); color: var(--tekst);
+    }
+    input::placeholder, textarea::placeholder { color: var(--dim); }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-zacht); }
+    select option { background: var(--kaart); color: var(--tekst); }
+    textarea { min-height: 80px; resize: vertical; }
+
+    button {
+      font: inherit; font-size: 14px; font-weight: 600;
+      border-radius: 999px; padding: 10px 20px; cursor: pointer;
+      border: 1px solid var(--tekst); background: var(--tekst); color: var(--zwart);
+      transition: opacity .15s, background .15s;
+    }
+    button:hover { opacity: 0.88; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button.licht { background: transparent; color: var(--tekst); border-color: #3A3A37; }
+    button.licht:hover { background: #1A1A19; opacity: 1; }
+    header button { padding: 8px 18px; font-size: 13px; }
+
+    .fout { color: var(--slecht); font-size: 14px; }
+    .ok { color: var(--accent); font-size: 14px; }
+    .verborgen { display: none !important; }
+
+    /* ---------- Login ---------- */
+    .login-wrap { min-height: calc(100vh - 66px); display: grid; place-items: center; padding: 24px; }
+    .login { width: 100%; max-width: 420px; padding: 34px; }
+    .login h1 { font-size: 36px; }
+    .login .ondertitel { font-size: 15px; margin-bottom: 26px; }
+    .login button { width: 100%; padding: 14px; margin-top: 6px; }
+
+    /* ---------- Live luchtkwaliteit (strook zoals op de Vernast-site) ---------- */
+    .tegels {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 1px; background: var(--lijn);
+      border: 1px solid var(--lijn); border-radius: 18px; overflow: hidden;
+    }
+    .tegel { background: var(--kaart-2); padding: 20px 22px; }
+    .tegel .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--dim); }
+    .tegel .waarde { font-size: 32px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; margin-top: 8px; }
+    .tegel .eenheid { font-size: 14px; font-weight: 500; color: var(--zacht); margin-left: 4px; letter-spacing: 0; }
+    .tegel .status { font-size: 14px; font-weight: 600; margin-top: 4px; }
+    .status.goed { color: var(--accent); } .status.matig { color: var(--matig); } .status.slecht { color: var(--slecht); }
+    .bijgewerkt { font-size: 13px; color: var(--dim); margin-top: 12px; }
+
+    details { margin-top: 18px; }
+    summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--zacht); }
+    summary:hover { color: var(--tekst); }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
+    th { text-align: left; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dim); font-weight: 600; padding: 10px 8px; border-bottom: 1px solid var(--lijn); }
+    td { padding: 12px 8px; border-bottom: 1px solid var(--lijn-zacht); vertical-align: top; color: var(--tekst); }
+    .tabel-wrap { overflow-x: auto; }
+
+    /* ---------- Hulp ---------- */
+    .hulp { border-top: 1px solid var(--lijn); margin-top: 24px; padding-top: 22px; }
+    .hulpknop { background: var(--rood); border-color: var(--rood); color: #fff; }
+    .eigen-meldingen h3 { margin-top: 22px; }
+    .eigen-meldingen ul { list-style: none; padding: 0; margin: 8px 0 0; }
+    .eigen-meldingen li { font-size: 14px; padding: 10px 0; border-bottom: 1px solid var(--lijn-zacht); display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+    /* ---------- Badges (stijl "BESCHIKBAAR") ---------- */
+    .badge {
+      display: inline-block; font-family: var(--mono); border-radius: 999px; padding: 3px 10px;
+      font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; white-space: nowrap; border: 1px solid;
+    }
+    .badge.open { color: var(--slecht); border-color: rgba(248, 113, 113, 0.5); background: rgba(248, 113, 113, 0.08); }
+    .badge.behandeling { color: var(--matig); border-color: rgba(245, 181, 68, 0.5); background: rgba(245, 181, 68, 0.08); }
+    .badge.opgelost { color: var(--teal); border-color: rgba(94, 234, 212, 0.45); background: rgba(94, 234, 212, 0.07); }
+
+    /* ---------- Beheer ---------- */
+    .banner { background: rgba(229, 72, 77, 0.14); border: 1px solid rgba(229, 72, 77, 0.55); color: #FFB4B6; padding: 14px 18px; border-radius: 16px; font-weight: 600; margin-bottom: 16px; }
+    .beheer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
     .beheer-grid .kaart { margin: 0; }
-    select { padding: 6px; margin: 6px 0 12px; max-width: 420px; width: 100%; }
-    .rij { display: flex; gap: 6px; align-items: center; max-width: 420px; }
+    .rij { display: flex; gap: 8px; }
     .rij input { margin: 0; }
-    .klantkeuze { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .klantkeuze select { width: auto; margin: 0; }
+    .rij button { white-space: nowrap; }
+    .klantkeuze { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--zacht); }
+    .klantkeuze select { width: auto; min-width: 230px; margin: 0; padding: 8px 12px; font-size: 14px; }
+    .acties button { padding: 6px 14px; font-size: 13px; margin: 0 6px 6px 0; }
+    tr.open-rij td { background: rgba(248, 113, 113, 0.05); }
+
+    @media (max-width: 600px) {
+      header { padding: 14px 16px; }
+      .merk span { display: none; }
+      .gebruiker #naam { display: none; }
+      main { padding: 32px 14px 56px; }
+      .kaart { padding: 20px; }
+    }
   </style>
 </head>
 <body>
-  <h1>Slimme BouwDroging</h1>
+  <header>
+    <div class="merk"><strong>Fresh Air One</strong><span>Klantenportaal</span></div>
+    <div id="gebruikerBalk" class="gebruiker verborgen">
+      <span id="naam"></span>
+      <span id="rol" class="rolbadge"></span>
+      <button id="uitlogKnop">Uitloggen</button>
+    </div>
+  </header>
 
   <!-- Inloggen -->
-  <div id="loginBlok" class="kaart">
-    <h2>Inloggen</h2>
-    <label>E-mail <input id="email" type="email" autocomplete="username"></label>
-    <label>Wachtwoord <input id="wachtwoord" type="password" autocomplete="current-password"></label>
-    <button id="loginKnop">Inloggen</button>
-    <p id="loginFout" class="fout"></p>
+  <div id="loginBlok" class="login-wrap">
+    <div class="kaart login">
+      <p class="eyebrow">Vernast-app</p>
+      <h1>Welkom terug.</h1>
+      <p class="ondertitel">Log in om de lucht in uw woning op te volgen.</p>
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="username">
+      <label for="wachtwoord">Wachtwoord</label>
+      <input id="wachtwoord" type="password" autocomplete="current-password">
+      <button id="loginKnop">Inloggen</button>
+      <p id="loginFout" class="fout"></p>
+    </div>
   </div>
 
   <!-- Na inloggen -->
-  <div id="appBlok" class="verborgen">
-    <p>Ingelogd als <strong id="naam"></strong> (rol: <span id="rol"></span>)
-      <button id="uitlogKnop">Uitloggen</button></p>
+  <main id="appBlok" class="verborgen">
+    <p class="eyebrow">Vernast-app</p>
+    <h1 id="begroeting"></h1>
+    <p id="ondertitel" class="ondertitel"></p>
 
     <!-- Alleen voor beheerder (Vernast) -->
-    <div id="meldingenBlok" class="kaart verborgen">
-      <div id="nieuwBanner" class="banner verborgen">🔔 Nieuwe melding!</div>
-      <h2>Meldingen (<span id="aantalOpen">0</span> open)</h2>
-      <p id="meldingenFout" class="fout"></p>
-      <div id="meldingenLijst"></div>
-    </div>
+    <section id="meldingenBlok" class="verborgen">
+      <div id="nieuwBanner" class="banner verborgen">🔔 Nieuwe melding binnengekomen</div>
+      <div class="kaart">
+        <div class="kaart-kop">
+          <h2>Meldingen</h2>
+          <span class="badge open"><span id="aantalOpen">0</span> open</span>
+        </div>
+        <p id="meldingenFout" class="fout"></p>
+        <div id="meldingenLijst" class="tabel-wrap"></div>
+      </div>
+    </section>
 
-    <!-- Alleen voor beheerder: klanten en woningen beheren -->
-    <div id="beheerBlok" class="verborgen">
-      <h2>Beheer</h2>
+    <section id="beheerBlok" class="verborgen">
+      <p class="sectietitel">Beheer</p>
       <div class="beheer-grid">
         <div class="kaart">
           <h3>Klant toevoegen</h3>
-          <label>Naam <input id="nkNaam" type="text"></label>
-          <label>E-mail <input id="nkEmail" type="email"></label>
-          <label>Tijdelijk wachtwoord (min. 8 tekens)</label>
+          <label for="nkNaam">Naam</label>
+          <input id="nkNaam" type="text">
+          <label for="nkEmail">E-mail</label>
+          <input id="nkEmail" type="email">
+          <label for="nkWachtwoord">Tijdelijk wachtwoord (min. 8 tekens)</label>
           <div class="rij">
             <input id="nkWachtwoord" type="text" autocomplete="off">
-            <button id="nkGenereer" type="button">Genereer</button>
+            <button id="nkGenereer" type="button" class="licht">Genereer</button>
           </div>
           <p></p>
           <button id="nkKnop">Klant aanmaken</button>
@@ -75,27 +241,35 @@
         </div>
         <div class="kaart">
           <h3>Woning toevoegen</h3>
-          <label>Naam <input id="nwNaam" type="text" placeholder="Woning 003"></label>
-          <label>Adres <input id="nwAdres" type="text"></label>
-          <label>Klant <select id="nwKlant"></select></label>
+          <label for="nwNaam">Naam</label>
+          <input id="nwNaam" type="text" placeholder="Woning 004">
+          <label for="nwAdres">Adres</label>
+          <input id="nwAdres" type="text">
+          <label for="nwKlant">Klant</label>
+          <select id="nwKlant"></select>
           <button id="nwKnop">Woning aanmaken</button>
           <p id="nwStatus"></p>
         </div>
       </div>
-      <div class="kaart">
+      <div class="kaart" style="margin-top:20px">
         <h3>Klanten</h3>
-        <div id="klantenLijst"></div>
+        <div id="klantenLijst" class="tabel-wrap"></div>
       </div>
-      <h2>Woningen</h2>
-    </div>
+    </section>
 
+    <p class="sectietitel" id="woningenTitel">Woningen</p>
     <div id="woningen"></div>
-  </div>
+  </main>
 
   <script>
+    // ================== INSTELLINGEN ==================
     // Alleen de PUBLIEKE sleutel hier. Nooit de secret/service_role key!
     const SUPABASE_URL = 'https://tmkolufszuzbariaupsd.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_HZgBbFIujygWgu7LCe7PSg_MPnblGz2';
+    // Naam (slug) van de Edge Function, exact zoals in Supabase:
+    const FUNCTIE_KLANT_AANMAKEN = 'klant-aanmakennder';
+    // ==================================================
+
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let rol = null;
@@ -103,21 +277,39 @@
     let klanten = [];
 
     const $ = (id) => document.getElementById(id);
-    const datum = (t) => new Date(t).toLocaleString('nl-BE');
+    const datum = (t) => new Date(t).toLocaleString('nl-BE', { dateStyle: 'short', timeStyle: 'short' });
 
-    function maak(tag, tekst) {
+    function maak(tag, tekst, klasse) {
       const el = document.createElement(tag);
-      if (tekst !== undefined) el.textContent = tekst;
+      if (tekst !== undefined && tekst !== null) el.textContent = tekst;
+      if (klasse) el.className = klasse;
       return el;
+    }
+
+    function statusBadge(status) {
+      const klasse = status === 'open' ? 'open' : status === 'opgelost' ? 'opgelost' : 'behandeling';
+      return maak('span', status, 'badge ' + klasse);
+    }
+
+    // Indicatieve grenzen voor de kleurcode (geen norm)
+    function beoordeel(soort, waarde) {
+      if (waarde === null || waarde === undefined) return null;
+      const v = Number(waarde);
+      if (soort === 'co2') return v < 800 ? ['goed', 'Frisse lucht'] : v < 1200 ? ['matig', 'Ventileren aangeraden'] : ['slecht', 'Muffe lucht'];
+      if (soort === 'vocht') return v < 40 ? ['matig', 'Droog'] : v <= 60 ? ['goed', 'Comfortabel'] : v <= 70 ? ['matig', 'Vrij vochtig'] : ['slecht', 'Te vochtig'];
+      if (soort === 'temp') return v < 16 ? ['matig', 'Koel'] : v <= 24 ? ['goed', 'Aangenaam'] : ['matig', 'Warm'];
+      return null;
     }
 
     // ---------- Inloggen / uitloggen ----------
     async function inloggen() {
       $('loginFout').textContent = '';
+      $('loginKnop').disabled = true;
       const { error } = await db.auth.signInWithPassword({
         email: $('email').value.trim(),
         password: $('wachtwoord').value
       });
+      $('loginKnop').disabled = false;
       if (error) { $('loginFout').textContent = 'Inloggen mislukt: ' + error.message; return; }
       await toonApp();
     }
@@ -127,6 +319,7 @@
       await db.auth.signOut();
       rol = null;
       $('appBlok').classList.add('verborgen');
+      $('gebruikerBalk').classList.add('verborgen');
       $('meldingenBlok').classList.add('verborgen');
       $('beheerBlok').classList.add('verborgen');
       $('loginBlok').classList.remove('verborgen');
@@ -140,23 +333,31 @@
       const { data: profiel } = await db.from('profielen')
         .select('naam, rol').eq('id', user.id).single();
       rol = profiel?.rol || 'onbekend';
-      $('naam').textContent = profiel?.naam || user.email;
+      const naam = profiel?.naam || user.email;
+      $('naam').textContent = naam;
       $('rol').textContent = rol;
 
       if (rol === 'beheerder') {
+        $('begroeting').textContent = 'Overzicht';
+        $('ondertitel').textContent = 'Alle klanten, woningen en meldingen op één plek.';
         $('meldingenBlok').classList.remove('verborgen');
         $('beheerBlok').classList.remove('verborgen');
+        $('woningenTitel').textContent = 'Alle woningen';
         await laadMeldingen();
         await laadKlanten();
         startRealtime();
       } else {
+        $('begroeting').textContent = 'Hallo ' + naam.split(' ')[0] + '.';
+        $('ondertitel').textContent = 'Zo staat het met de lucht in uw woning.';
         $('meldingenBlok').classList.add('verborgen');
         $('beheerBlok').classList.add('verborgen');
+        $('woningenTitel').textContent = 'Uw woning';
       }
 
       await toonWoningen();
 
       $('loginBlok').classList.add('verborgen');
+      $('gebruikerBalk').classList.remove('verborgen');
       $('appBlok').classList.remove('verborgen');
     }
 
@@ -166,59 +367,91 @@
 
       const { data: woningen, error } = await db.from('woningen')
         .select('id, naam, adres, klant_id').order('naam');
-      if (error) { lijst.appendChild(maak('p', 'Fout: ' + error.message)); return; }
-      if (woningen.length === 0) { lijst.appendChild(maak('p', 'Geen woningen gevonden.')); }
+      if (error) { lijst.appendChild(maak('p', 'Fout: ' + error.message, 'fout')); return; }
+      if (woningen.length === 0) { lijst.appendChild(maak('p', 'Geen woningen gevonden.', 'ondertitel')); return; }
 
       for (const w of woningen) {
-        const kaart = maak('div'); kaart.className = 'kaart';
-        kaart.appendChild(maak('h2', w.naam));
-        kaart.appendChild(maak('p', w.adres || ''));
-        if (rol === 'beheerder') kaart.appendChild(klantKeuzeVoorWoning(w));
-        kaart.appendChild(await metingenTabel(w.id));
+        const kaart = maak('div', null, 'kaart');
+        const kop = maak('div', null, 'kaart-kop');
+        const titel = maak('div');
+        titel.appendChild(maak('h2', w.naam));
+        titel.appendChild(maak('p', w.adres || '', 'adres'));
+        kop.appendChild(titel);
+        if (rol === 'beheerder') kop.appendChild(klantKeuzeVoorWoning(w));
+        kaart.appendChild(kop);
+
+        kaart.appendChild(await luchtkwaliteit(w.id));
         if (rol === 'klant') kaart.appendChild(hulpBlok(w));
         lijst.appendChild(kaart);
       }
     }
 
-    async function metingenTabel(woningId) {
+    // ---------- Live luchtkwaliteit + historiek ----------
+    async function luchtkwaliteit(woningId) {
+      const blok = maak('div');
       const { data: metingen } = await db.from('metingen')
         .select('gemeten_op, temperatuur, vochtigheid, co2')
         .eq('woning_id', woningId)
         .order('gemeten_op', { ascending: false })
         .limit(10);
 
-      if (!metingen || metingen.length === 0) return maak('p', 'Nog geen metingen.');
+      if (!metingen || metingen.length === 0) {
+        blok.appendChild(maak('p', 'Nog geen metingen ontvangen.', 'adres'));
+        return blok;
+      }
 
+      const laatste = metingen[0];
+      const tegels = maak('div', null, 'tegels');
+      tegels.appendChild(tegel('Temperatuur', laatste.temperatuur, '°C', beoordeel('temp', laatste.temperatuur)));
+      tegels.appendChild(tegel('Vochtigheid', laatste.vochtigheid, '%', beoordeel('vocht', laatste.vochtigheid)));
+      tegels.appendChild(tegel('CO₂', laatste.co2, 'ppm', beoordeel('co2', laatste.co2)));
+      blok.appendChild(tegels);
+      blok.appendChild(maak('p', 'Laatst bijgewerkt: ' + datum(laatste.gemeten_op), 'bijgewerkt'));
+
+      const det = maak('details');
+      det.appendChild(maak('summary', 'Recente metingen'));
+      const wrap = maak('div', null, 'tabel-wrap');
       const tabel = maak('table');
       const kop = maak('tr');
-      ['Tijdstip', 'Temperatuur (°C)', 'Vochtigheid (%)', 'CO₂ (ppm)']
-        .forEach(t => kop.appendChild(maak('th', t)));
+      ['Tijdstip', 'Temperatuur', 'Vochtigheid', 'CO₂'].forEach(t => kop.appendChild(maak('th', t)));
       tabel.appendChild(kop);
       for (const m of metingen) {
         const rij = maak('tr');
         rij.appendChild(maak('td', datum(m.gemeten_op)));
-        rij.appendChild(maak('td', m.temperatuur ?? '–'));
-        rij.appendChild(maak('td', m.vochtigheid ?? '–'));
-        rij.appendChild(maak('td', m.co2 ?? '–'));
+        rij.appendChild(maak('td', m.temperatuur != null ? m.temperatuur + ' °C' : '–'));
+        rij.appendChild(maak('td', m.vochtigheid != null ? m.vochtigheid + ' %' : '–'));
+        rij.appendChild(maak('td', m.co2 != null ? m.co2 + ' ppm' : '–'));
         tabel.appendChild(rij);
       }
-      return tabel;
+      wrap.appendChild(tabel);
+      det.appendChild(wrap);
+      blok.appendChild(det);
+      return blok;
+    }
+
+    function tegel(label, waarde, eenheid, oordeel) {
+      const t = maak('div', null, 'tegel');
+      t.appendChild(maak('div', label, 'label'));
+      const w = maak('div', null, 'waarde');
+      w.appendChild(document.createTextNode(waarde != null ? waarde : '–'));
+      if (waarde != null) w.appendChild(maak('span', eenheid, 'eenheid'));
+      t.appendChild(w);
+      if (oordeel) t.appendChild(maak('div', oordeel[1], 'status ' + oordeel[0]));
+      return t;
     }
 
     // ---------- Klant: hulpknop ----------
     function hulpBlok(w) {
-      const blok = maak('div'); blok.className = 'hulp';
+      const blok = maak('div', null, 'hulp');
       blok.appendChild(maak('h3', 'Hulp nodig?'));
 
       const tekst = maak('textarea');
       tekst.placeholder = 'Beschrijf kort het probleem (optioneel)';
       tekst.maxLength = 500;
 
-      const knop = maak('button', '🆘 Hulp vragen');
-      knop.className = 'hulpknop';
-
+      const knop = maak('button', 'Hulp vragen', 'hulpknop');
       const status = maak('p');
-      const eigenLijst = maak('div');
+      const eigenLijst = maak('div', null, 'eigen-meldingen');
 
       knop.addEventListener('click', async () => {
         knop.disabled = true;
@@ -253,11 +486,14 @@
         .limit(5);
       doel.innerHTML = '';
       if (!data || data.length === 0) return;
-      doel.appendChild(maak('h4', 'Uw laatste meldingen'));
+      doel.appendChild(maak('h3', 'Uw laatste meldingen'));
       const ul = maak('ul');
       for (const m of data) {
-        ul.appendChild(maak('li',
-          datum(m.aangemaakt_op) + ' – ' + m.status + (m.bericht ? ' – ' + m.bericht : '')));
+        const li = maak('li');
+        li.appendChild(statusBadge(m.status));
+        li.appendChild(maak('span', datum(m.aangemaakt_op), 'adres'));
+        if (m.bericht) li.appendChild(maak('span', m.bericht));
+        ul.appendChild(li);
       }
       doel.appendChild(ul);
     }
@@ -275,26 +511,25 @@
       if (error) { $('meldingenFout').textContent = 'Fout: ' + error.message; return; }
 
       $('aantalOpen').textContent = data.filter(m => m.status !== 'opgelost').length;
-      if (data.length === 0) { doel.appendChild(maak('p', 'Nog geen meldingen.')); return; }
+      if (data.length === 0) { doel.appendChild(maak('p', 'Nog geen meldingen.', 'adres')); return; }
 
       const tabel = maak('table');
       const kop = maak('tr');
-      ['Tijdstip', 'Woning', 'Klant', 'Bericht', 'Status', 'Actie']
-        .forEach(t => kop.appendChild(maak('th', t)));
+      ['Tijdstip', 'Woning', 'Klant', 'Bericht', 'Status', 'Actie'].forEach(t => kop.appendChild(maak('th', t)));
       tabel.appendChild(kop);
 
       for (const m of data) {
         const rij = maak('tr');
-        if (m.status === 'open') rij.className = 'open';
+        if (m.status === 'open') rij.className = 'open-rij';
         rij.appendChild(maak('td', datum(m.aangemaakt_op)));
         rij.appendChild(maak('td', (m.woningen?.naam || '?') + (m.woningen?.adres ? ' – ' + m.woningen.adres : '')));
         rij.appendChild(maak('td', m.profielen?.naam || '?'));
         rij.appendChild(maak('td', m.bericht || '(geen beschrijving)'));
-        rij.appendChild(maak('td', m.status));
+        const st = maak('td'); st.appendChild(statusBadge(m.status)); rij.appendChild(st);
 
-        const actie = maak('td');
+        const actie = maak('td', null, 'acties');
         if (m.status === 'open') {
-          const b = maak('button', 'In behandeling');
+          const b = maak('button', 'In behandeling', 'licht');
           b.addEventListener('click', () => zetStatus(m.id, 'in behandeling'));
           actie.appendChild(b);
         }
@@ -335,11 +570,11 @@
         .select('id, naam, email').eq('rol', 'klant').order('naam');
       const doel = $('klantenLijst');
       doel.innerHTML = '';
-      if (error) { doel.appendChild(maak('p', 'Fout: ' + error.message)); return; }
+      if (error) { doel.appendChild(maak('p', 'Fout: ' + error.message, 'fout')); return; }
       klanten = data || [];
       vulKlantKeuze($('nwKlant'), null);
 
-      if (klanten.length === 0) { doel.appendChild(maak('p', 'Nog geen klanten.')); return; }
+      if (klanten.length === 0) { doel.appendChild(maak('p', 'Nog geen klanten.', 'adres')); return; }
       const tabel = maak('table');
       const kop = maak('tr');
       ['Naam', 'E-mail'].forEach(t => kop.appendChild(maak('th', t)));
@@ -366,8 +601,8 @@
     }
 
     function klantKeuzeVoorWoning(w) {
-      const blok = maak('div'); blok.className = 'klantkeuze';
-      blok.appendChild(maak('span', 'Klant:'));
+      const blok = maak('div', null, 'klantkeuze');
+      blok.appendChild(maak('span', 'Klant'));
       const select = maak('select');
       vulKlantKeuze(select, w.klant_id);
       const status = maak('span');
@@ -401,7 +636,7 @@
       $('nkKnop').disabled = true;
       st.textContent = 'Bezig...'; st.className = '';
 
-      const { error } = await db.functions.invoke('klant-aanmakennder', {
+      const { error } = await db.functions.invoke(FUNCTIE_KLANT_AANMAKEN, {
         body: { naam, email, wachtwoord }
       });
 
@@ -438,11 +673,12 @@
       $('nwKnop').disabled = false;
     }
 
+    // ---------- Knoppen koppelen ----------
     $('nkGenereer').addEventListener('click', genereerWachtwoord);
     $('nkKnop').addEventListener('click', klantAanmaken);
     $('nwKnop').addEventListener('click', woningAanmaken);
-
     $('loginKnop').addEventListener('click', inloggen);
+    $('wachtwoord').addEventListener('keydown', (e) => { if (e.key === 'Enter') inloggen(); });
     $('uitlogKnop').addEventListener('click', uitloggen);
 
     // Al ingelogd? Dan meteen de app tonen.

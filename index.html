@@ -241,6 +241,31 @@
     .onderhoud-form select, .onderhoud-form input { width: auto; margin: 0; padding: 8px 12px; font-size: 13px; }
     .onderhoud-form input { flex: 1; min-width: 200px; }
 
+
+    /* ---------- Account ---------- */
+    .overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 50; padding: 20px; }
+    .paneel { width: 100%; max-width: 440px; }
+    .paneel-kop { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .sluit { background: transparent; border: 1px solid #3A3A37; color: var(--tekst); padding: 4px 12px; }
+    .info-banner { background: rgba(245, 181, 68, 0.08); border: 1px solid rgba(245, 181, 68, 0.45); color: var(--matig); padding: 14px 18px; border-radius: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-weight: 600; font-size: 14px; }
+    .info-banner button { padding: 7px 16px; font-size: 13px; }
+
+    /* ---------- Vlootoverzicht ---------- */
+    .kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); background: var(--kaart); border: 1px solid var(--lijn); border-radius: 18px; overflow: hidden; margin-bottom: 16px; }
+    .kpi > div { padding: 16px 18px; box-shadow: 1px 0 0 var(--lijn), 0 1px 0 var(--lijn); }
+    .kpi .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dim); }
+    .kpi .waarde { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; margin-top: 4px; }
+    .kpi .waarde.goed { color: var(--accent); } .kpi .waarde.matig { color: var(--matig); } .kpi .waarde.slecht { color: var(--slecht); }
+    .vloot-balk { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+    .vloot-balk input[type=search] { width: auto; flex: 1; min-width: 200px; margin: 0; padding: 9px 14px; font-size: 14px; }
+    .vinkje { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--zacht); margin: 0; cursor: pointer; }
+    .vinkje input { width: auto; margin: 0; accent-color: #22D3EE; }
+    #vlootTabel tr.klikbaar { cursor: pointer; }
+    #vlootTabel tr.klikbaar:hover td { background: #171716; }
+    .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .toestel.markeer { animation: markeer 1.6s ease-out; border-radius: 14px; }
+    @keyframes markeer { 0% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.7); } 100% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0); } }
+
     @media (max-width: 600px) {
       header { padding: 14px 16px; }
       .merk span { display: none; }
@@ -256,6 +281,7 @@
     <div id="gebruikerBalk" class="gebruiker verborgen">
       <span id="naam"></span>
       <span id="rol" class="rolbadge"></span>
+      <button id="accountKnop" class="licht">Account</button>
       <button id="uitlogKnop">Uitloggen</button>
     </div>
   </header>
@@ -275,11 +301,51 @@
     </div>
   </div>
 
+  <!-- Account: wachtwoord wijzigen -->
+  <div id="accountOverlay" class="overlay verborgen">
+    <div class="kaart paneel">
+      <div class="paneel-kop">
+        <h2>Account</h2>
+        <button id="accountSluit" class="sluit" type="button">Sluiten</button>
+      </div>
+      <p class="adres" id="accountEmail"></p>
+      <h3 style="margin-top:20px">Wachtwoord wijzigen</h3>
+      <label for="wwHuidig">Huidig wachtwoord</label>
+      <input id="wwHuidig" type="password" autocomplete="current-password">
+      <label for="wwNieuw">Nieuw wachtwoord (minstens 8 tekens)</label>
+      <input id="wwNieuw" type="password" autocomplete="new-password">
+      <label for="wwHerhaal">Herhaal nieuw wachtwoord</label>
+      <input id="wwHerhaal" type="password" autocomplete="new-password">
+      <button id="wwKnop">Wachtwoord wijzigen</button>
+      <p id="wwStatus"></p>
+    </div>
+  </div>
+
   <!-- Na inloggen -->
   <main id="appBlok" class="verborgen">
+    <div id="tijdelijkBanner" class="info-banner verborgen">
+      <span>U gebruikt nog een tijdelijk wachtwoord. Kies een eigen wachtwoord.</span>
+      <button id="tijdelijkKnop" type="button">Nu wijzigen</button>
+    </div>
     <p class="eyebrow">Vernast-app</p>
     <h1 id="begroeting"></h1>
     <p id="ondertitel" class="ondertitel"></p>
+
+    <!-- Alleen voor beheerder: vlootoverzicht -->
+    <section id="vlootBlok" class="verborgen">
+      <div id="vlootKpi" class="kpi"></div>
+      <div class="kaart">
+        <div class="kaart-kop">
+          <h2>Vloot</h2>
+          <span class="adres" id="vlootTeller"></span>
+        </div>
+        <div class="vloot-balk">
+          <input id="vlootZoek" type="search" placeholder="Zoek op klant, woning, kamer of serienummer">
+          <label class="vinkje"><input id="vlootProbleem" type="checkbox"> Alleen problemen</label>
+        </div>
+        <div id="vlootTabel" class="tabel-wrap"></div>
+      </div>
+    </section>
 
     <!-- Alleen voor beheerder (Vernast) -->
     <section id="meldingenBlok" class="verborgen">
@@ -356,6 +422,9 @@
     let boostTimer = null;
     const luisteraars = {};   // toestel_id -> lijst functies die bij statuswijziging opnieuw tekenen
     let gebruikerId = null;
+    let gebruikerEmail = '';
+    let vlootData = [];
+    let vlootTimer = null;
     function luister(toestelId, fn) { (luisteraars[toestelId] = luisteraars[toestelId] || []).push(fn); }
 
     const $ = (id) => document.getElementById(id);
@@ -397,6 +466,9 @@
       $('gebruikerBalk').classList.add('verborgen');
       $('meldingenBlok').classList.add('verborgen');
       $('beheerBlok').classList.add('verborgen');
+      $('vlootBlok').classList.add('verborgen');
+      $('tijdelijkBanner').classList.add('verborgen');
+      $('accountOverlay').classList.add('verborgen');
       $('loginBlok').classList.remove('verborgen');
     }
 
@@ -405,6 +477,8 @@
       const { data: { user } } = await db.auth.getUser();
       if (!user) return;
       gebruikerId = user.id;
+      gebruikerEmail = user.email || '';
+      $('tijdelijkBanner').classList.toggle('verborgen', !(user.user_metadata && user.user_metadata.tijdelijk_wachtwoord === true));
       for (const k of Object.keys(luisteraars)) delete luisteraars[k];
 
       const { data: profiel } = await db.from('profielen')
@@ -417,9 +491,11 @@
       if (rol === 'beheerder') {
         $('begroeting').textContent = 'Overzicht';
         $('ondertitel').textContent = 'Alle klanten, woningen en meldingen op één plek.';
+        $('vlootBlok').classList.remove('verborgen');
         $('meldingenBlok').classList.remove('verborgen');
         $('beheerBlok').classList.remove('verborgen');
         $('woningenTitel').textContent = 'Alle woningen';
+        await laadVloot();
         await laadMeldingen();
         await laadKlanten();
         await laadFilterLijst();
@@ -427,6 +503,7 @@
       } else {
         $('begroeting').textContent = 'Hallo ' + naam.split(' ')[0] + '.';
         $('ondertitel').textContent = 'Zo staat het met de lucht in uw woning.';
+        $('vlootBlok').classList.add('verborgen');
         $('meldingenBlok').classList.add('verborgen');
         $('beheerBlok').classList.add('verborgen');
         $('woningenTitel').textContent = 'Uw woning';
@@ -520,6 +597,7 @@
     async function toestelBlok(t, w) {
       const st = Array.isArray(t.toestel_status) ? t.toestel_status[0] : t.toestel_status;
       const blok = maak('div', null, 'toestel');
+      blok.id = 'toestel-' + t.id;
 
       // Kop: kamer + status-chips
       const kop = maak('div', null, 'toestel-kop');
@@ -648,7 +726,7 @@
         tekenFilter();
         for (const fn of (luisteraars[t.id] || [])) fn({ filter_procent: pct });
         await laadHistoriek();
-        if (rol === 'beheerder') laadFilterLijst();
+        if (rol === 'beheerder') { laadFilterLijst(); vlootVerversen(); }
       });
       acties.appendChild(filterKnop);
 
@@ -734,6 +812,147 @@
       return blok;
     }
 
+    // ---------- Beheerder: vlootoverzicht ----------
+    function vlootVerversen() {
+      if (rol !== 'beheerder') return;
+      clearTimeout(vlootTimer);
+      vlootTimer = setTimeout(laadVloot, 800);
+    }
+
+    function heeftProbleem(r) {
+      return r.online === false || r.open_alarmen > 0 || (r.filter_procent !== null && r.filter_procent <= 35);
+    }
+
+    async function laadVloot() {
+      const { data, error } = await db.rpc('vloot_overzicht');
+      if (error) { $('vlootTabel').innerHTML = ''; $('vlootTabel').appendChild(maak('p', 'Fout: ' + error.message, 'fout')); return; }
+      vlootData = data || [];
+
+      const { count: openMeldingen } = await db.from('meldingen')
+        .select('id', { count: 'exact', head: true })
+        .neq('status', 'opgelost');
+
+      const totaal = vlootData.length;
+      const online = vlootData.filter(r => r.online).length;
+      const offline = totaal - online;
+      const alarmen = vlootData.reduce((n, r) => n + Number(r.open_alarmen || 0), 0);
+      const filters = vlootData.filter(r => r.filter_procent !== null && r.filter_procent <= 35).length;
+
+      const kpi = $('vlootKpi');
+      kpi.innerHTML = '';
+      for (const [label, waarde, kleur] of [
+        ['Toestellen', totaal, ''],
+        ['Online', online, 'goed'],
+        ['Offline', offline, offline ? 'slecht' : 'goed'],
+        ['Open alarmen', alarmen, alarmen ? 'matig' : 'goed'],
+        ['Filters ≤ 35 %', filters, filters ? 'matig' : 'goed'],
+        ['Open meldingen', openMeldingen ?? '–', openMeldingen ? 'slecht' : 'goed']
+      ]) {
+        const d = maak('div');
+        d.appendChild(maak('div', label, 'label'));
+        d.appendChild(maak('div', String(waarde), 'waarde ' + kleur));
+        kpi.appendChild(d);
+      }
+      tekenVloot();
+    }
+
+    function tekenVloot() {
+      const zoek = $('vlootZoek').value.trim().toLowerCase();
+      const alleenProbleem = $('vlootProbleem').checked;
+      const rijen = vlootData.filter(r => {
+        if (alleenProbleem && !heeftProbleem(r)) return false;
+        if (!zoek) return true;
+        return [r.klant, r.woning, r.kamer, r.serienummer].some(x => (x || '').toLowerCase().includes(zoek));
+      });
+      $('vlootTeller').textContent = rijen.length + ' van ' + vlootData.length + ' toestellen';
+
+      const doel = $('vlootTabel');
+      doel.innerHTML = '';
+      if (rijen.length === 0) { doel.appendChild(maak('p', 'Geen toestellen gevonden.', 'adres')); return; }
+
+      const tabel = maak('table');
+      const kop = maak('tr');
+      ['Status', 'Klant', 'Woning', 'Kamer', 'Toestand', 'CO₂', 'Vocht', 'Filter', 'Alarmen'].forEach(x => kop.appendChild(maak('th', x)));
+      tabel.appendChild(kop);
+
+      for (const r of rijen) {
+        const rij = maak('tr', null, 'klikbaar');
+        rij.title = 'Ga naar dit toestel';
+
+        const st = maak('td');
+        st.appendChild(maak('span', r.online ? 'Online' : 'Offline', 'badge ' + (r.online ? 'opgelost' : 'open')));
+        if (!r.online && r.laatst_gezien) st.appendChild(maak('div', sindsTekst(r.laatst_gezien), 'voetnoot'));
+        rij.appendChild(st);
+
+        rij.appendChild(maak('td', r.klant || '—'));
+        rij.appendChild(maak('td', r.woning || '?'));
+        const kamer = maak('td', r.kamer || '?');
+        if (r.serienummer) kamer.appendChild(maak('div', r.serienummer, 'voetnoot'));
+        rij.appendChild(kamer);
+
+        rij.appendChild(maak('td', r.aan === false ? 'Uit' : (MODUS_TEKST[r.modus] || r.modus || '?') + ' · ' + r.stand));
+
+        const co2 = beoordeel('co2', r.co2);
+        rij.appendChild(maak('td', r.co2 != null ? getal(r.co2, 0) + ' ppm' : '–', 'num status ' + (co2 ? co2[0] : '')));
+        const vocht = beoordeel('vochtigheid', r.vochtigheid);
+        rij.appendChild(maak('td', r.vochtigheid != null ? getal(r.vochtigheid, 0) + ' %' : '–', 'num status ' + (vocht ? vocht[0] : '')));
+        const f = r.filter_procent != null ? filterOordeel(r.filter_procent) : null;
+        rij.appendChild(maak('td', r.filter_procent != null ? r.filter_procent + ' %' : '–', 'num status ' + (f ? f[0] : '')));
+
+        const al = maak('td');
+        if (Number(r.open_alarmen) > 0) al.appendChild(maak('span', r.open_alarmen + ' open', 'badge behandeling'));
+        else al.appendChild(maak('span', '—', 'adres'));
+        rij.appendChild(al);
+
+        rij.addEventListener('click', () => {
+          const el = document.getElementById('toestel-' + r.toestel_id);
+          if (!el) return;
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el.classList.remove('markeer'); void el.offsetWidth; el.classList.add('markeer');
+        });
+        tabel.appendChild(rij);
+      }
+      doel.appendChild(tabel);
+    }
+
+    // ---------- Account: wachtwoord wijzigen ----------
+    function openAccount() {
+      $('accountEmail').textContent = 'Ingelogd als ' + gebruikerEmail;
+      $('wwHuidig').value = ''; $('wwNieuw').value = ''; $('wwHerhaal').value = '';
+      $('wwStatus').textContent = ''; $('wwStatus').className = '';
+      $('accountOverlay').classList.remove('verborgen');
+      $('wwHuidig').focus();
+    }
+    function sluitAccount() { $('accountOverlay').classList.add('verborgen'); }
+
+    async function wachtwoordWijzigen() {
+      const st = $('wwStatus');
+      const huidig = $('wwHuidig').value;
+      const nieuw = $('wwNieuw').value;
+      const herhaal = $('wwHerhaal').value;
+      const fout = (t) => { st.textContent = t; st.className = 'fout'; };
+
+      if (!huidig) return fout('Vul uw huidige wachtwoord in.');
+      if (nieuw.length < 8) return fout('Het nieuwe wachtwoord moet minstens 8 tekens hebben.');
+      if (nieuw !== herhaal) return fout('De twee nieuwe wachtwoorden zijn niet gelijk.');
+      if (nieuw === huidig) return fout('Het nieuwe wachtwoord moet verschillen van het huidige.');
+
+      $('wwKnop').disabled = true;
+      st.textContent = 'Bezig...'; st.className = '';
+
+      // Eerst controleren of het huidige wachtwoord klopt
+      const { error: e1 } = await db.auth.signInWithPassword({ email: gebruikerEmail, password: huidig });
+      if (e1) { $('wwKnop').disabled = false; return fout('Het huidige wachtwoord klopt niet.'); }
+
+      const { error: e2 } = await db.auth.updateUser({ password: nieuw, data: { tijdelijk_wachtwoord: false } });
+      $('wwKnop').disabled = false;
+      if (e2) return fout('Niet gelukt: ' + e2.message);
+
+      st.textContent = 'Uw wachtwoord is gewijzigd ✓'; st.className = 'ok';
+      $('wwHuidig').value = ''; $('wwNieuw').value = ''; $('wwHerhaal').value = '';
+      $('tijdelijkBanner').classList.add('verborgen');
+    }
+
     // ---------- Beheerder: filters bijna op ----------
     async function laadFilterLijst() {
       const doel = $('filterLijst');
@@ -780,6 +999,7 @@
       statusKanaal = db.channel('toestel-status')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'toestel_status' }, (payload) => {
           for (const fn of (luisteraars[payload.new.toestel_id] || [])) fn(payload.new);
+          vlootVerversen();
         })
         .subscribe();
     }
@@ -1198,6 +1418,7 @@
             setTimeout(() => banner.classList.add('verborgen'), 10000);
           }
           laadMeldingen();
+          vlootVerversen();
         })
         .subscribe();
     }
@@ -1318,6 +1539,14 @@
     $('loginKnop').addEventListener('click', inloggen);
     $('wachtwoord').addEventListener('keydown', (e) => { if (e.key === 'Enter') inloggen(); });
     $('uitlogKnop').addEventListener('click', uitloggen);
+    $('accountKnop').addEventListener('click', openAccount);
+    $('tijdelijkKnop').addEventListener('click', openAccount);
+    $('accountSluit').addEventListener('click', sluitAccount);
+    $('accountOverlay').addEventListener('click', (e) => { if (e.target === $('accountOverlay')) sluitAccount(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') sluitAccount(); });
+    $('wwKnop').addEventListener('click', wachtwoordWijzigen);
+    $('vlootZoek').addEventListener('input', tekenVloot);
+    $('vlootProbleem').addEventListener('change', tekenVloot);
 
     // Al ingelogd? Dan meteen de app tonen.
     db.auth.getSession().then(({ data }) => { if (data.session) toonApp(); });

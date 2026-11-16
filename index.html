@@ -1,5 +1,129 @@
 <!DOCTYPE html>
 <html lang="nl">
-<head><meta charset="UTF-8"><title>Slimme BouwDroging</title></head>
-<body><h1>Slimme BouwDroging – klantenportaal</h1><p>Test: de site werkt.</p></body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Slimme BouwDroging – klantenportaal</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 16px; color: #222; }
+    h1 { color: #1b5e7a; }
+    .kaart { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    input { display: block; width: 100%; max-width: 320px; padding: 8px; margin: 6px 0 12px; }
+    button { padding: 8px 16px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    th, td { border-bottom: 1px solid #eee; padding: 6px; text-align: left; }
+    .fout { color: #b00020; }
+    .verborgen { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Slimme BouwDroging</h1>
+
+  <!-- Inloggen -->
+  <div id="loginBlok" class="kaart">
+    <h2>Inloggen</h2>
+    <label>E-mail <input id="email" type="email" autocomplete="username"></label>
+    <label>Wachtwoord <input id="wachtwoord" type="password" autocomplete="current-password"></label>
+    <button id="loginKnop">Inloggen</button>
+    <p id="loginFout" class="fout"></p>
+  </div>
+
+  <!-- Na inloggen -->
+  <div id="appBlok" class="verborgen">
+    <p>Ingelogd als <strong id="naam"></strong> (rol: <span id="rol"></span>)
+      <button id="uitlogKnop">Uitloggen</button></p>
+    <div id="woningen"></div>
+  </div>
+
+  <script>
+    // Alleen de PUBLIEKE sleutel hier. Nooit de secret/service_role key!
+    const SUPABASE_URL = 'https://tmkolufszuzbariaupsd.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_HZgBbFIujygWgu7LCe7PSg_MPnblGz2';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const $ = (id) => document.getElementById(id);
+
+    function maak(tag, tekst) {
+      const el = document.createElement(tag);
+      if (tekst !== undefined) el.textContent = tekst;
+      return el;
+    }
+
+    async function inloggen() {
+      $('loginFout').textContent = '';
+      const { error } = await db.auth.signInWithPassword({
+        email: $('email').value.trim(),
+        password: $('wachtwoord').value
+      });
+      if (error) { $('loginFout').textContent = 'Inloggen mislukt: ' + error.message; return; }
+      await toonApp();
+    }
+
+    async function uitloggen() {
+      await db.auth.signOut();
+      $('appBlok').classList.add('verborgen');
+      $('loginBlok').classList.remove('verborgen');
+    }
+
+    async function toonApp() {
+      const { data: { user } } = await db.auth.getUser();
+      if (!user) return;
+
+      const { data: profiel } = await db.from('profielen')
+        .select('naam, rol').eq('id', user.id).single();
+      $('naam').textContent = profiel?.naam || user.email;
+      $('rol').textContent = profiel?.rol || 'onbekend';
+
+      const lijst = $('woningen');
+      lijst.innerHTML = '';
+
+      const { data: woningen, error } = await db.from('woningen')
+        .select('id, naam, adres').order('naam');
+      if (error) { lijst.appendChild(maak('p', 'Fout: ' + error.message)); return; }
+      if (woningen.length === 0) { lijst.appendChild(maak('p', 'Geen woningen gevonden.')); }
+
+      for (const w of woningen) {
+        const kaart = maak('div'); kaart.className = 'kaart';
+        kaart.appendChild(maak('h2', w.naam));
+        kaart.appendChild(maak('p', w.adres || ''));
+
+        const { data: metingen } = await db.from('metingen')
+          .select('gemeten_op, temperatuur, vochtigheid, co2')
+          .eq('woning_id', w.id)
+          .order('gemeten_op', { ascending: false })
+          .limit(10);
+
+        if (!metingen || metingen.length === 0) {
+          kaart.appendChild(maak('p', 'Nog geen metingen.'));
+        } else {
+          const tabel = maak('table');
+          const kop = maak('tr');
+          ['Tijdstip', 'Temperatuur (°C)', 'Vochtigheid (%)', 'CO₂ (ppm)']
+            .forEach(t => kop.appendChild(maak('th', t)));
+          tabel.appendChild(kop);
+          for (const m of metingen) {
+            const rij = maak('tr');
+            rij.appendChild(maak('td', new Date(m.gemeten_op).toLocaleString('nl-BE')));
+            rij.appendChild(maak('td', m.temperatuur ?? '–'));
+            rij.appendChild(maak('td', m.vochtigheid ?? '–'));
+            rij.appendChild(maak('td', m.co2 ?? '–'));
+            tabel.appendChild(rij);
+          }
+          kaart.appendChild(tabel);
+        }
+        lijst.appendChild(kaart);
+      }
+
+      $('loginBlok').classList.add('verborgen');
+      $('appBlok').classList.remove('verborgen');
+    }
+
+    $('loginKnop').addEventListener('click', inloggen);
+    $('uitlogKnop').addEventListener('click', uitloggen);
+
+    // Al ingelogd? Dan meteen de app tonen.
+    db.auth.getSession().then(({ data }) => { if (data.session) toonApp(); });
+  </script>
+</body>
 </html>

@@ -433,3 +433,10 @@ a.actie-item:hover { background: #161615; }
 }
 .nieuw-toestel { display: grid; place-items: center; min-height: 160px; border: 1px dashed #3A3A37; border-radius: var(--radius); }
 .nieuw-toestel > button { background: transparent; color: var(--zacht); border-color: #3A3A37; }
+
+/* ---------- Bouwdrogers ---------- */
+.droger-tabel td:nth-child(4) { min-width: 120px; }
+@media (max-width: 860px) {
+  .droger-tabel .smal-weg { display: none; }
+  .droger-tabel td, .droger-tabel th { padding-left: 6px; padding-right: 6px; }
+}

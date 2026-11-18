@@ -17,7 +17,8 @@ app/
     │   ├── grafiek.js      ← grafiek per meetwaarde (24 u / 7 d / 30 d)
     │   ├── onderhoud.js    ← filter + onderhoudshistoriek
     │   ├── gesprek.js      ← gesprek bij een melding
-    │   └── kamerkaart.js   ← compacte kaart per kamer
+    │   ├── kamerkaart.js   ← compacte kaart per kamer
+    │   └── droger.js       ← bouwdrogers: toestanden, urenbalk, vermogensgrafiek
     └── paginas/            ← één bestand per pagina
         ├── home.js         ← klant: overzicht kamers
         ├── kamer.js        ← klant + Vernast: detail van één kamer/toestel
@@ -27,7 +28,9 @@ app/
         ├── toestellen.js   ← Vernast: vlootoverzicht
         ├── klanten.js      ← Vernast: klanten + woningen toevoegen
         ├── klant.js        ← Vernast: detail van één klant (+ toestel registreren)
-        └── onderhoud.js    ← Vernast: filters en planning
+        ├── onderhoud.js    ← Vernast: filters en planning
+        ├── bouwdrogers.js  ← bouwdrogers: Vernast tabel (#/bouwdrogers), klant kaarten (#/droging)
+        └── bouwdroger.js   ← bouwdroger detail: uren, grafiek, onderbrekingen, aan/uit (Vernast)
 ```
 
 ## Pagina's (adres na `#`)
@@ -38,6 +41,7 @@ app/
 | `#/kamer/<id>` | `#/toestellen`, `#/toestel/<id>` |
 | `#/meldingen`, `#/meldingen/<id>`, `#/meldingen/nieuw` | `#/meldingen`, `#/meldingen/<id>` |
 | `#/account` | `#/klanten`, `#/klant/<id>`, `#/onderhoud`, `#/account` |
+| `#/droging`, `#/bouwdroger/<id>` | `#/bouwdrogers`, `#/bouwdroger/<id>` |
 
 ## Samenwerken
 

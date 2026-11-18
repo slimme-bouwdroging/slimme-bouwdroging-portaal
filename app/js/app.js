@@ -12,6 +12,8 @@ import * as toestellen from './paginas/toestellen.js';
 import * as klanten from './paginas/klanten.js';
 import * as klant from './paginas/klant.js';
 import * as onderhoud from './paginas/onderhoud.js';
+import * as bouwdrogers from './paginas/bouwdrogers.js';
+import * as bouwdroger from './paginas/bouwdroger.js';
 
 // ---------- Iconen (eenvoudige lijntekeningen) ----------
 const ICOON = {
@@ -21,6 +23,7 @@ const ICOON = {
   meldingen: '<path d="M4 5h16v11H8l-4 4z"/>',
   klanten: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.6.7 2.6 2.4 3 5.2"/>',
   onderhoud: '<path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L3 18l3 3 6.2-6.2a4 4 0 0 0 5.3-5.3l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+  droger: '<rect x="5" y="3" width="14" height="16" rx="2.5"/><path d="M8 7h8M8 10h8"/><path d="M12 13.5c-1.3 1.6-2 2.6-2 3.4a2 2 0 0 0 4 0c0-.8-.7-1.8-2-3.4z"/><path d="M7 19v2M17 19v2"/>',
   account: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.2-6 8-6s7 2 8 6"/>'
 };
 const svg = (naam) => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICOON[naam]}</svg>`;
@@ -29,22 +32,24 @@ const svg = (naam) => `<svg width="20" height="20" viewBox="0 0 24 24" fill="non
 const MENU = {
   klant: [
     { pad: 'home', tekst: 'Home', icoon: 'home', ook: ['kamer'] },
+    { pad: 'droging', tekst: 'Bouwdroging', icoon: 'droger', ook: ['bouwdroger'] },
     { pad: 'meldingen', tekst: 'Meldingen', icoon: 'meldingen' },
     { pad: 'account', tekst: 'Account', icoon: 'account' }
   ],
   beheerder: [
     { pad: 'dashboard', tekst: 'Dashboard', icoon: 'dashboard' },
     { pad: 'toestellen', tekst: 'Toestellen', icoon: 'toestellen', ook: ['toestel'] },
+    { pad: 'bouwdrogers', tekst: 'Bouwdrogers', icoon: 'droger', ook: ['bouwdroger'] },
     { pad: 'meldingen', tekst: 'Meldingen', icoon: 'meldingen', teller: true },
     { pad: 'klanten', tekst: 'Klanten', icoon: 'klanten', ook: ['klant'] },
-    { pad: 'onderhoud', tekst: 'Onderhoud', icoon: 'onderhoud' },
+    { pad: 'onderhoud', tekst: 'Onderhoud', icoon: 'onderhoud', gsm: false },
     { pad: 'account', tekst: 'Account', icoon: 'account' }
   ]
 };
 
 const ROUTES = {
-  klant: { home, kamer, meldingen, account },
-  beheerder: { dashboard, toestellen, toestel: kamer, meldingen, klanten, klant, onderhoud, account }
+  klant: { home, kamer, droging: bouwdrogers, bouwdroger, meldingen, account },
+  beheerder: { dashboard, toestellen, toestel: kamer, meldingen, klanten, klant, onderhoud, bouwdrogers, bouwdroger, account }
 };
 
 let opruimen = [];
@@ -118,6 +123,7 @@ function bouwMenu() {
   for (const houder of [$('nav'), $('tabbalk')]) {
     houder.innerHTML = '';
     for (const it of items) {
+      if (houder.id === 'tabbalk' && it.gsm === false) continue;   // te weinig plaats op gsm
       const a = maak('a');
       a.href = '#/' + it.pad;
       a.dataset.pad = it.pad;
@@ -196,6 +202,9 @@ function startRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'meldingen' }, (p) => bus.emit('melding', p))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'melding_berichten' }, (p) => bus.emit('bericht', p.new))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'alarmen' }, (p) => bus.emit('alarm', p))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'droger_status' }, (p) => bus.emit('droger', p.new))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'droger_onderbrekingen' }, (p) => { bus.emit('droger', p.new); if (p.eventType === 'INSERT') bus.emit('droger-stil', p.new); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'droger_commandos' }, (p) => bus.emit('droger-commando', p.new))
     .subscribe();
 
   // Meldingen rechtsonder, op elke pagina
@@ -204,6 +213,13 @@ function startRealtime() {
     if (sessie.rol === 'beheerder' && p.eventType === 'INSERT') {
       toast('🔔 Nieuwe melding: ' + (CATEGORIE[p.new.categorie] || 'hulpvraag'), 'slecht', '#/meldingen/' + p.new.id);
     }
+  });
+  // Bouwdroger valt stil -> melding voor Vernast
+  bus.on('droger-stil', async (o) => {
+    if (sessie.rol !== 'beheerder') return;
+    const { data } = await db.from('droger_plaatsingen').select('droger_id, bouwdrogers(code), woningen(naam)').eq('id', o.plaatsing_id).maybeSingle();
+    const naam = data ? (data.bouwdrogers?.code || 'Bouwdroger') + ' op ' + (data.woningen?.naam || 'werf') : 'Een bouwdroger';
+    toast('⚠ ' + naam + ' droogt niet meer', 'slecht', data ? '#/bouwdroger/' + data.droger_id : '#/bouwdrogers');
   });
   bus.on('bericht', (b) => {
     if (b.afzender === sessie.id || b.soort !== 'bericht') return;
